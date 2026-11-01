@@ -15,12 +15,8 @@ class CloudCuContractTest(unittest.TestCase):
         self.assertIn('"hotupdate_check"', api)
 
     def test_hotupdate_applied_report_is_transition_only(self):
-        for path in (
-            "android/app/src/main/java/com/qiubo/optimaltv/hotupdate/HotUpdateManager.kt",
-            "internal/mobile/app/src/main/java/com/qiubo/optimaltv/hotupdate/HotUpdateManager.kt",
-        ):
-            src = self.read(path)
-            self.assertIn('active > 0 && active != prevActive', src)
+        src = self.read("android/app/src/main/java/com/qiubo/optimaltv/hotupdate/HotUpdateManager.kt")
+        self.assertIn('active > 0 && active != prevActive', src)
 
     def test_database_indexes_are_recorded_as_idempotent_migration(self):
         sql = self.read("tools/pg_cu_optimization_migration.sql")

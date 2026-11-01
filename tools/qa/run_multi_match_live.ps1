@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $matrix = @($Targets | ForEach-Object {
     $parts = $_.Split('|')
     if ($parts.Count -ne 3) { throw 'Expected serial|package|matchId.' }
-    if ($parts[1] -notin @('com.qiubo.optimaltv.public','com.qiubo.optimaltv.mobile.public')) { throw 'Unknown app package.' }
+    if ($parts[1] -ne 'com.qiubo.optimaltv.public') { throw 'Unknown app package.' }
     if ($parts[2] -notmatch '^\d+$') { throw 'Expected a numeric match ID.' }
     [pscustomobject]@{ serial=$parts[0]; package=$parts[1]; matchId=$parts[2] }
 })
@@ -30,7 +30,7 @@ $expectedBackendHash = (Get-FileHash (Join-Path $PSScriptRoot '../backend-src/pr
 $jobs = @()
 try {
     foreach ($entry in $matrix) {
-        foreach ($testPackage in @('com.qiubo.optimaltv.public','com.qiubo.optimaltv.mobile.public')) {
+        foreach ($testPackage in @('com.qiubo.optimaltv.public')) {
             & $Adb -s $entry.serial shell am force-stop $testPackage | Out-Null
         }
         & $Adb -s $entry.serial logcat -c

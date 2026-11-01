@@ -22,8 +22,8 @@
 
 1. 测试：后端改动跑 `tools/backend-src/tests` 球迹直播测试；Kotlin 侧以 `assembleRelease` 编译通过兜底。
 2. 部署更新服务并重建产物：`python tools/release_all.py --deploy`。
-3. 构建 APK：`android` 与 `internal/mobile` 各跑一次 `.\gradlew.bat assembleRelease`（自动归档到 `apk/TV版/`、`apk/移动版/`）。
-4. 如需发布 Android 应用内更新包，使用 `python tools/publish_apk_update.py --channel <tv|mobile> --apk <APK路径> --version-code <版本号> --version-name <版本名> --cert <签名证书SHA-256>`；按工具提示补齐更新说明和发布参数。热更新管理后台及其上传脚本已删除。
+3. 构建 APK：在 `android` 运行一次 `.\gradlew.bat assembleRelease`（自动归档到 `apk/TV版/QiuJiLive-TV.apk`）。
+4. 如需发布 Android TV 应用内更新包，使用 `python tools/publish_apk_update.py --channel tv --apk <APK路径> --version-code <版本号> --version-name <版本名> --cert <签名证书SHA-256>`；按工具提示补齐更新说明和发布参数。热更新管理后台及其上传脚本已删除。
 5. 更新文档：把本次变更摘要与实测证据写进 `docs/项目文档.md` 对应章节
    （全项目只保留 `README.md` 与 `docs/项目文档.md` 两份文档）。
 6. 提交并推送：`git add -A` → commit → `git push origin main`。

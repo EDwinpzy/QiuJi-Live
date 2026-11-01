@@ -1,6 +1,6 @@
-"""Stage deterministic assets required by the TV and mobile clients.
+"""Stage deterministic assets required by the TV client.
 
-This is intentionally not a Web application build.  The native clients fetch
+This is intentionally not a Web application build. The native TV client fetches
 only the football artwork and logo through their embedded backend; standalone
 HTML, JavaScript, CSS, service-worker manifest and hashed Web bundles must not
 be produced or copied.

@@ -8,7 +8,7 @@ enum class RecoveryAction {
     GIVE_UP,
 }
 
-/** Pure recovery ladder shared by TV/mobile player coordinators. */
+/** Pure recovery ladder for the TV player coordinator. */
 object PlaybackRecoveryPolicy {
     const val STALL_THRESHOLD_MS = 8_000L
     fun isStalled(durationMs: Long): Boolean = durationMs >= STALL_THRESHOLD_MS

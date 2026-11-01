@@ -3,7 +3,7 @@
 这个模块不访问网络，供后台上传接口和单元测试共同使用。APK 文件由后台写入自建对象存储；
 客户端只读取这里生成的稳定 JSON 结构。
 
-2026-09-21：对象桶单对象硬上限 100 MiB（平台级，随套餐固定），两端 APK 约 157 MiB。
+2026-09-21：对象桶单对象硬上限 100 MiB（平台级，随套餐固定），TV APK 约 157 MiB。
 因此清单支持**分片**——APK 拆成若干 < 100 MiB 的对象，客户端按序下载拼成一个文件，
 再对整包做 SHA-256 与签名校验。`apk.sha256` / `apk.size` 始终是**整包**口径，
 `apk.parts` 只描述下载方式；不认识分片的旧客户端会因 `apk.url` 为空而静默跳过。
@@ -21,10 +21,6 @@ CHANNELS = {
     "tv": {
         "device_type": "tv",
         "package_name": "com.qiubo.optimaltv.public",
-    },
-    "mobile": {
-        "device_type": "mobile",
-        "package_name": "com.qiubo.optimaltv.mobile.public",
     },
 }
 
@@ -159,7 +155,7 @@ def build_manifest(
     parts 非空即分片清单：此时 `apk.url` 允许为空，客户端改为按序下载各分片后校验整包。
     """
     if channel not in CHANNELS:
-        raise ValueError("版本渠道必须是 tv 或 mobile")
+        raise ValueError("版本渠道必须是 tv")
     if int(version_code) < 1:
         raise ValueError("versionCode 必须大于 0")
     if int(min_supported_version_code) < 0:

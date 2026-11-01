@@ -22,7 +22,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 GRADLE_MODULES = {
     "tv": ROOT / "android" / "app",
-    "mobile": ROOT / "internal" / "mobile" / "app",
 }
 RELEASE_URL = "https://tv.example.com"
 MIGRATION_ORIGIN = "https://103.236.97.137:35208"
@@ -294,14 +293,13 @@ def test_debug_keeps_the_local_migration_test_entry(name, module):
 
 # ---------------------------------------------------------------- 静态腿
 
-def test_tv_and_mobile_share_the_same_release_gate_rules():
-    """两套工程必须逐字节使用同一段规则与同一套报错文案。"""
-    tv, mobile = (_extract_gate(module) for module in GRADLE_MODULES.values())
-    assert tv == mobile, "TV 与移动版的 Release 入口门槛代码块出现分叉"
+def test_tv_release_gate_rules_are_complete():
+    """TV 工程必须保留完整的 Release 入口规则与报错文案。"""
+    tv = _extract_gate(GRADLE_MODULES["tv"])
     markers = ["拒绝迁移 CA / IP 测试入口", "Release 入口不得包含 userinfo",
                "Release 入口不得包含 query", "Release 入口不得使用 IP 字面量",
                "Release 入口不得包含路径",
-               # opt-in 通道：开关名与解锁条件两端必须一致，否则发布口径会分叉。
+               # opt-in 通道：保留 IP 迁移入口所需的显式开关。
                "allowIpReleaseOrigin", "OTV_ALLOW_IP_RELEASE_ORIGIN", "otvIpReleaseOptIn"]
     for marker in markers:
         assert marker in tv, f"门槛缺少拒绝条件：{marker}"

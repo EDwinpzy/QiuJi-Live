@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the native TV/mobile backend artifact and optionally deploy the self-hosted stack."""
+"""Build the native TV backend artifact and optionally deploy the self-hosted stack."""
 
 import argparse
 import os
@@ -160,12 +160,12 @@ def main():
             raise SystemExit("nginx 容器重建失败，反向代理尚未切换")
         if not run(selfhosted_nginx_reload_command(ROOT), deploy_dir):
             raise SystemExit("nginx reload 失败，发布未完成")
-        print("\n[OK] TV／移动版后端包与原生兼容资源已构建\n"
+        print("\n[OK] TV 后端包与原生兼容资源已构建\n"
               "[OK] schema-migrations 已重跑并成功\n"
               "[OK] 已调用自建 Docker Compose 部署入口\n"
               "[OK] nginx 配置已验证、容器已重建并 reload")
     else:
-        print("\n[OK] TV／移动版后端包与原生兼容资源已构建\n"
+        print("\n[OK] TV 后端包与原生兼容资源已构建\n"
               "[PAUSED] 未执行部署")
 
 

@@ -6,12 +6,11 @@ from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[3]
 APP_CONFIG = ROOT / "android" / "app"
-MOBILE_CONFIG = ROOT / "internal" / "mobile" / "app"
 
 
 class EndpointMigrationContractTests(unittest.TestCase):
-    def test_both_apks_keep_only_football_and_update_endpoints(self):
-        for module in (APP_CONFIG, MOBILE_CONFIG):
+    def test_tv_apk_keeps_only_football_and_update_endpoints(self):
+        for module in (APP_CONFIG,):
             with self.subTest(module=module):
                 gradle = (module / "build.gradle").read_text(encoding="utf-8")
                 self.assertIn("apiBaseUrl", gradle)
@@ -21,7 +20,7 @@ class EndpointMigrationContractTests(unittest.TestCase):
                 self.assertNotIn("IPTV_LATEST_URL", gradle)
 
     def test_release_defaults_require_the_vps_opt_in_and_do_not_regress_migration_version(self):
-        for module in (APP_CONFIG, MOBILE_CONFIG):
+        for module in (APP_CONFIG,):
             with self.subTest(module=module):
                 gradle = (module / "build.gradle").read_text(encoding="utf-8")
                 # 正式包不再有 IP 默认入口：必须显式传入已验收的正式域名。
@@ -38,7 +37,7 @@ class EndpointMigrationContractTests(unittest.TestCase):
                 self.assertGreaterEqual(tuple(map(int, name.group(1).split("."))), (1, 1))
 
     def test_network_security_keeps_local_http_backend_working(self):
-        for module in (APP_CONFIG, MOBILE_CONFIG):
+        for module in (APP_CONFIG,):
             with self.subTest(module=module):
                 manifest = (module / "src" / "main" / "AndroidManifest.xml").read_text(encoding="utf-8")
                 config = ElementTree.parse(

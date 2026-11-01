@@ -8,8 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ReleaseSigningConfigTests(unittest.TestCase):
     def test_release_signing_passwords_are_read_from_local_properties(self):
-        for path in (ROOT / "android" / "app" / "build.gradle",
-                     ROOT / "internal" / "mobile" / "app" / "build.gradle"):
+        for path in (ROOT / "android" / "app" / "build.gradle",):
             with self.subTest(path=path):
                 source = path.read_text(encoding="utf-8")
                 self.assertTrue("OTV_RELEASE_STORE_PASSWORD" in source,
@@ -23,17 +22,13 @@ class ReleaseSigningConfigTests(unittest.TestCase):
 
     def test_apk_archives_follow_the_active_worktree(self):
         tv = (ROOT / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
-        mobile = (ROOT / "internal" / "mobile" / "app" / "build.gradle").read_text(encoding="utf-8")
         self.assertTrue('rootProject.file("../apk/TV版")' in tv,
                         "TV release output must stay inside the active checkout")
-        self.assertTrue('rootProject.file("../../apk/移动版")' in mobile,
-                        "mobile release output must stay inside the active checkout")
-        self.assertNotIn("D:/MyProjects/My TV", tv + mobile,
+        self.assertNotIn("D:/MyProjects/My TV", tv,
                          "release builds must not write into the main worktree")
 
     def test_gradle_build_directories_follow_the_active_worktree(self):
-        for path in (ROOT / "android" / "build.gradle",
-                     ROOT / "internal" / "mobile" / "build.gradle"):
+        for path in (ROOT / "android" / "build.gradle",):
             with self.subTest(path=path):
                 source = path.read_text(encoding="utf-8")
                 self.assertIn('buildDir = new File(rootDir, "build/', source,

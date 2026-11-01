@@ -54,7 +54,7 @@ def upload_object_url(key: str) -> str:
 
 
 def manifest_url(manifest_name: str) -> str:
-    if manifest_name in ("tv", "mobile"):
+    if manifest_name == "tv":
         return runtime_client.ENDPOINTS.public_web_url(f"apk-update/{manifest_name}.json")
     return obj_url(f"{PREFIX}/{manifest_name}.json")
 
@@ -86,7 +86,7 @@ def get_object(key: str) -> bytes | None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="发布 APK 应用内更新清单（直传对象桶）")
-    ap.add_argument("--channel", required=True, choices=["tv", "mobile"])
+    ap.add_argument("--channel", required=True, choices=["tv"])
     ap.add_argument("--apk", required=True, help="APK 文件路径")
     ap.add_argument("--version-code", required=True, type=int)
     ap.add_argument("--version-name", required=True)

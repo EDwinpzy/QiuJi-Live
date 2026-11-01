@@ -24,13 +24,10 @@ class TottenhamCrestContractTest(unittest.TestCase):
             self.assertEqual("https://crests.football-data.org/73.svg", result["url"])
 
     def test_bundled_android_maps_both_aliases_to_same_crest(self):
-        for relative in (
-            "android/app/src/main/assets/team_icons.json",
-            "internal/mobile/app/src/main/assets/team_icons.json",
-        ):
-            icons = json.loads((BACKEND.parents[1] / relative).read_text(encoding="utf-8"))
-            self.assertEqual("https://crests.football-data.org/73.svg", icons["热刺"])
-            self.assertEqual("https://crests.football-data.org/73.svg", icons["托特纳姆热刺"])
+        relative = "android/app/src/main/assets/team_icons.json"
+        icons = json.loads((BACKEND.parents[1] / relative).read_text(encoding="utf-8"))
+        self.assertEqual("https://crests.football-data.org/73.svg", icons["热刺"])
+        self.assertEqual("https://crests.football-data.org/73.svg", icons["托特纳姆热刺"])
 
 
 if __name__ == "__main__":

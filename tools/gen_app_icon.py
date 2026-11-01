@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""从“球迹直播”品牌源图生成 Android TV 与移动端资源。
+"""从“球迹直播”品牌源图生成 Android TV 资源。
 
 源图固定为 tools/assets/qiuji-live-app-icon-1024.png，并通过 SHA-256 校验，
 避免资源在无意间被替换后仍生成出不可追溯的图标。
 
-输出（两个 Android 工程）：
+输出（Android TV 工程）：
   mipmap-xxxhdpi/ic_launcher_fg.png  432x432 自适应图标前景
   mipmap-xhdpi/ic_launcher_fg.png    216x216 自适应图标前景
   drawable/my_tv_logo.png            透明底白色“球迹直播”启动字标
@@ -29,7 +29,6 @@ BRAND_NAME = "球迹直播"
 
 RES_ROOTS = (
     ROOT / "android" / "app" / "src" / "main" / "res",
-    ROOT / "internal" / "mobile" / "app" / "src" / "main" / "res",
 )
 
 ICON_BG = (8, 38, 26, 255)  # 与 values/colors.xml 的 #08261A 保持一致
@@ -234,12 +233,6 @@ def validate_outputs() -> None:
                 raise AssertionError(f"PNG 必须为 RGBA：{path} 实际 {image.mode}")
             project_hashes.append(sha256_file(path))
 
-        if project_hashes[0] != project_hashes[1]:
-            raise AssertionError(
-                f"两端文件哈希不一致：{relative}\n"
-                f"  TV: {project_hashes[0]}\n"
-                f"  Mobile: {project_hashes[1]}"
-            )
         expected_hashes[relative] = project_hashes[0]
 
     for res_root in RES_ROOTS:
@@ -281,7 +274,7 @@ def validate_outputs() -> None:
 
     print(f"源图 SHA-256: {SOURCE_SHA256}")
     print(f"品牌名: {BRAND_NAME}")
-    print("生成文件尺寸与两端哈希验证通过：")
+    print("生成文件尺寸与哈希验证通过：")
     for relative, digest in expected_hashes.items():
         size = OUTPUT_SIZES[relative]
         size_text = f"{size[0]}x{size[1]}" if size else "透明字标"

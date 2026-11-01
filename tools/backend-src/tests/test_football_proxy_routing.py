@@ -126,14 +126,12 @@ class FootballProxyRoutingTest(unittest.TestCase):
 
 
 class AndroidMatchNodeSelectionContractTest(unittest.TestCase):
-    def test_both_clients_request_direct_stream_lines_without_vpn_configuration(self):
+    def test_tv_requests_direct_stream_lines_without_vpn_configuration(self):
         root = BACKEND.parents[1]
-        for client in ("android", "internal/mobile"):
-            with self.subTest(client=client):
-                code = (root / client / "app/src/main/java/com/qiubo/optimaltv/data/repo/LiveRepository.kt").read_text(encoding="utf-8")
-                self.assertIn('LiveStreamRequestPath.build(matchId, "all", fresh)', code)
-                self.assertIn("LiveStreamRequestPath.build(matchId, source, fresh)", code)
-                self.assertNotIn("football_vpn", code.lower())
+        code = (root / "android/app/src/main/java/com/qiubo/optimaltv/data/repo/LiveRepository.kt").read_text(encoding="utf-8")
+        self.assertIn('LiveStreamRequestPath.build(matchId, "all", fresh)', code)
+        self.assertIn("LiveStreamRequestPath.build(matchId, source, fresh)", code)
+        self.assertNotIn("football_vpn", code.lower())
 
 
 if __name__ == "__main__":

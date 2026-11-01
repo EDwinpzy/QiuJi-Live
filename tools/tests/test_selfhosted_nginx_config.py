@@ -36,14 +36,9 @@ class QiuJiLiveIngressConfigTests(unittest.TestCase):
             ("location ^~ /hotupdate/", "runtime update reports"),
             ("location ^~ /v1/storages/object/", "update object storage"),
             ("location = /web/apk-update/tv.json", "TV update manifest compatibility URL"),
-            ("location = /web/apk-update/mobile.json", "mobile update manifest compatibility URL"),
             (
                 "proxy_pass http://storage:8092/v1/storages/object/hotupdate/apk-update/tv.json;",
                 "TV manifest storage route",
-            ),
-            (
-                "proxy_pass http://storage:8092/v1/storages/object/hotupdate/apk-update/mobile.json;",
-                "mobile manifest storage route",
             ),
             ("location / {\n        return 404;", "unknown routes rejected"),
         ):
@@ -51,6 +46,7 @@ class QiuJiLiveIngressConfigTests(unittest.TestCase):
         self.assertNotIn("proxy_pass http://web-api", nginx)
         self.assertNotIn("return 308 /web/", nginx)
         self.assertNotIn("location = /web {", nginx)
+        self.assertNotIn("mobile.json", nginx)
         for removed_route in ("/activate", "/iptv/", "/metadata/", "/admin/"):
             self.assertNotIn(removed_route, nginx)
 
@@ -87,12 +83,6 @@ class QiuJiLiveIngressConfigTests(unittest.TestCase):
         retired_role = (ROOT / "tools" / "selfhosted" / "license_importer_role.sql").read_text(encoding="utf-8")
         self.require("NOLOGIN", retired_role, "retired importer account disabled")
         self.assertNotIn("GRANT ", retired_role)
-
-    def test_tv_and_mobile_apps_trust_the_same_private_ca(self):
-        tv_ca = ROOT / "android" / "app" / "src" / "main" / "res" / "raw" / "mytv_migration_ca.pem"
-        mobile_ca = ROOT / "internal" / "mobile" / "app" / "src" / "main" / "res" / "raw" / "mytv_migration_ca.pem"
-        self.assertEqual(tv_ca.read_bytes(), mobile_ca.read_bytes())
-
 
 if __name__ == "__main__":
     unittest.main()

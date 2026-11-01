@@ -44,10 +44,5 @@ class LiveMainstreamWhitelistTest(unittest.TestCase):
         self.assertIn(".filter { it.isLive }", self.src)
         self.assertIn("it.matchId in liveFootballIds", self.src)
 
-    def test_mobile_tree_in_sync(self):
-        mb = (ROOT / "internal/mobile/app/src/main/java/com/qiubo/optimaltv/data/repo/LiveRepository.kt").read_text(encoding="utf-8")
-        self.assertEqual(self.src, mb, "两工程不一致，请跑 tools/sync_shared.py")
-
-
 if __name__ == "__main__":
     unittest.main()

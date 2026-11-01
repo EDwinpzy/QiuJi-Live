@@ -26,7 +26,7 @@ class EmbeddedBackendMigrationConfigTests(unittest.TestCase):
         return module
 
     def test_embedded_python_sets_only_the_hotupdate_object_origin_and_adds_ca(self):
-        for app_dir in (ROOT / "android" / "app", ROOT / "internal" / "mobile" / "app"):
+        for app_dir in (ROOT / "android" / "app",):
             with self.subTest(app=app_dir):
                 runner = self._load_runner(app_dir)
                 ca_path = app_dir / "src" / "main" / "res" / "raw" / "mytv_migration_ca.pem"

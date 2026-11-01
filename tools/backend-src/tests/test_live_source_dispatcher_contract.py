@@ -5,7 +5,7 @@ maxRequestsPerHost=5。旧版 liveSourceHttp 由主客户端 newBuilder 派生�
 Dispatcher，进足球页瞬间被慢接口占满 → 信号源请求排队 → callTimeout 到点抛
 InterruptedIOException → 播放器「无可用信号源」，只有杀进程才恢复。
 
-这里锁住修复形态：两端 liveSourceHttp 必须自带 dispatcher(...) 配置，
+这里锁住修复形态：TV 版 liveSourceHttp 必须自带 dispatcher(...) 配置，
 后端必须保留 src=all 的短缓存与失败回退常量。
 """
 import pathlib
@@ -15,7 +15,6 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 LIVE_REPOSITORIES = (
     "android/app/src/main/java/com/qiubo/optimaltv/data/repo/LiveRepository.kt",
-    "internal/mobile/app/src/main/java/com/qiubo/optimaltv/data/repo/LiveRepository.kt",
 )
 
 

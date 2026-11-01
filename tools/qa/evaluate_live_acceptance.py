@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 
-VARIANTS = {"tv", "mobile"}
+VARIANTS = {"tv"}
 PLAYBACK_ERROR_PATTERNS = [
     r"Playback error",
     r"PlaybackException",
@@ -156,7 +156,6 @@ def target_identity_ok(target: dict[str, Any]) -> bool:
         and bool(target["serial"].strip())
         and target.get("package") in {
             "com.qiubo.optimaltv.public",
-            "com.qiubo.optimaltv.mobile.public",
         }
         and isinstance(target.get("matchId"), str)
         and re.fullmatch(r"\d+", target["matchId"]) is not None
@@ -838,7 +837,7 @@ def evaluate(
         uniqueSerialCount=len({str(item.get("serial")) for item in targets}),
     )
     if not coverage_ok:
-        failures.append("target matrix does not prove three distinct matches on both TV and mobile")
+        failures.append("target matrix does not prove three distinct matches on TV")
 
     candidate_details, candidate_failures, candidates = candidate_gates(matrix)
     top_gates["candidateBuilds"] = gate(not candidate_failures, variants=candidate_details)
@@ -940,30 +939,25 @@ def make_self_test_fixture(root: Path) -> None:
     completed = now
     matches = ["910001", "910002", "910003"]
     tv_sha = "a" * 64
-    mobile_sha = "b" * 64
     source_backend = "c" * 64
     targets: list[dict[str, Any]] = []
     serial_index = 0
     delay_probes: list[dict[str, Any]] = []
 
-    for variant, package, apk_sha in [
-        ("tv", "com.qiubo.optimaltv.public", tv_sha),
-        ("mobile", "com.qiubo.optimaltv.mobile.public", mobile_sha),
-    ]:
-        for match_id in matches:
-            serial_index += 1
-            serial = f"self-test-{serial_index}"
-            target_id = f"{serial}-{match_id}"
-            targets.append({
-                "id": target_id,
-                "serial": serial,
-                "package": package,
-                "variant": variant,
-                "matchId": match_id,
-                "label": f"self test {variant} {match_id}",
-                "evidenceDirectory": f"runs/{target_id}",
-                "expectedApkSha256": apk_sha,
-            })
+    for match_id in matches:
+        serial_index += 1
+        serial = f"self-test-{serial_index}"
+        target_id = f"{serial}-{match_id}"
+        targets.append({
+            "id": target_id,
+            "serial": serial,
+            "package": "com.qiubo.optimaltv.public",
+            "variant": "tv",
+            "matchId": match_id,
+            "label": f"self test tv {match_id}",
+            "evidenceDirectory": f"runs/{target_id}",
+            "expectedApkSha256": tv_sha,
+        })
 
     matrix = {
         "schemaVersion": 1,
@@ -973,13 +967,6 @@ def make_self_test_fixture(root: Path) -> None:
             "tv": {
                 "apkFileName": "self-tv.apk",
                 "apkSha256": tv_sha,
-                "embeddedBackendProxySha256": source_backend,
-                "sourceProxySha256": source_backend,
-                "backendMatchesSource": True,
-            },
-            "mobile": {
-                "apkFileName": "self-mobile.apk",
-                "apkSha256": mobile_sha,
                 "embeddedBackendProxySha256": source_backend,
                 "sourceProxySha256": source_backend,
                 "backendMatchesSource": True,

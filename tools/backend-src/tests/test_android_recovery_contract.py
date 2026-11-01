@@ -23,11 +23,5 @@ class AndroidRecoveryContractTest(unittest.TestCase):
         self.assertIn("fun shutdown()", source)
         self.assertIn("consecutiveTimeouts", source)
 
-    def test_mobile_has_the_same_recovery_policy_and_buffering_observer(self):
-        source = self.read("internal/mobile/app/src/main/java/com/qiubo/optimaltv/ui/player/PlayerViewModel.kt")
-        self.assertIn("PlaybackRecoveryPolicy.action", source)
-        self.assertIn("EnginePlayState.BUFFERING", source[source.index("private fun startStallMonitor"):])
-
-
 if __name__ == "__main__":
     unittest.main()

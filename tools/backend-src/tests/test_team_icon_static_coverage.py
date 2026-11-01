@@ -1,4 +1,4 @@
-"""静态队徽表覆盖后端映射，并保持 TV / mobile 两端一致。"""
+"""静态队徽表覆盖后端映射。"""
 import ast
 import json
 import pathlib
@@ -14,7 +14,6 @@ import proxy  # noqa: E402
 
 ASSET_PATHS = (
     ROOT / "android/app/src/main/assets/team_icons.json",
-    ROOT / "internal/mobile/app/src/main/assets/team_icons.json",
 )
 AMBIGUOUS_OR_UNMAPPED_ALIASES = {"巴黎", "红牛", "恒大"}
 
@@ -39,9 +38,6 @@ class TeamIconStaticCoverageTest(unittest.TestCase):
     def setUpClass(cls):
         cls.assets = [json.loads(path.read_text(encoding="utf-8")) for path in ASSET_PATHS]
         cls.known_map = _known_map()
-
-    def test_tv_and_mobile_assets_are_identical(self):
-        self.assertEqual(self.assets[0], self.assets[1])
 
     def test_bundle_covers_every_backend_static_mapping(self):
         names = set(proxy.FB_CREST_IDS) | set(self.known_map)
@@ -117,12 +113,11 @@ class TeamIconStaticCoverageTest(unittest.TestCase):
                 self.assertNotIn(name, icons, name)
 
     def test_both_image_loaders_support_png_and_svg_sources(self):
-        for variant in ("android", "internal/mobile"):
-            app_source = (ROOT / variant / "app/src/main/java/com/qiubo/optimaltv/App.kt").read_text(encoding="utf-8")
-            gradle_source = (ROOT / variant / "app/build.gradle").read_text(encoding="utf-8")
-            self.assertIn("coil-svg", gradle_source, variant)
-            self.assertIn("SvgDecoder.Factory()", app_source, variant)
-            self.assertIn("coil-compose", gradle_source, variant)
+        app_source = (ROOT / "android/app/src/main/java/com/qiubo/optimaltv/App.kt").read_text(encoding="utf-8")
+        gradle_source = (ROOT / "android/app/build.gradle").read_text(encoding="utf-8")
+        self.assertIn("coil-svg", gradle_source)
+        self.assertIn("SvgDecoder.Factory()", app_source)
+        self.assertIn("coil-compose", gradle_source)
 
 
 if __name__ == "__main__":

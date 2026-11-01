@@ -115,6 +115,13 @@ class BackendZipCompletenessTests(unittest.TestCase):
                 ):
                     self.assertNotIn(retired, archive.namelist())
 
+    def test_backend_builder_writes_only_the_tv_asset(self):
+        module = _load_module("bbz_tv_only", TOOLS / "build_backend_zip.py")
+        self.assertTrue(str(module.SRC_ZIP).replace("\\", "/").endswith(
+            "/android/app/src/main/assets/backend/python-backend.zip"
+        ))
+        self.assertFalse(hasattr(module, "MOBILE_ZIP"))
+
 
 if __name__ == "__main__":
     unittest.main()

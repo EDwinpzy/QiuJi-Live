@@ -102,7 +102,6 @@ def test_current_release_and_apk_runtime_config_has_no_cloudbase_paths():
         ROOT / "tools/release_all.py",
         ROOT / "tools/apk_update.py",
         ROOT / "android/app/src/main/python/proxy_runner.py",
-        ROOT / "internal/mobile/app/src/main/python/proxy_runner.py",
         ROOT / "deploy/selfhosted/compose.yaml",
         ROOT / "deploy/selfhosted/.env.example",
     )
@@ -118,9 +117,8 @@ def test_current_release_and_apk_runtime_config_has_no_cloudbase_paths():
     assert "web-api:" not in compose
     assert "Dockerfile.web" not in compose
     assert "location = /web/apk-update/tv.json" in nginx
-    assert "location = /web/apk-update/mobile.json" in nginx
     assert "http://storage:8092/v1/storages/object/hotupdate/apk-update/tv.json" in nginx
-    assert "http://storage:8092/v1/storages/object/hotupdate/apk-update/mobile.json" in nginx
+    assert "mobile.json" not in nginx
 
 
 def test_football_proxy_contains_no_cloudbase_fallbacks():

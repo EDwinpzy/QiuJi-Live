@@ -1,7 +1,7 @@
-"""Rebuild the embedded TV/mobile backend and its native-only assets.
+"""Rebuild the embedded TV backend and its native-only assets.
 
 The archive contains the live Python runtime plus the football artwork and
-logo used by both native clients.  The retired standalone Web UI is never
+logo used by the native TV client. The retired standalone Web UI is never
 packaged: no HTML, application JavaScript, stylesheet, Web manifest or hashed
 Web bundle belongs in this archive.
 
@@ -24,7 +24,6 @@ except ImportError:  # direct `python tools/build_backend_zip.py` invocation
 ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT / "tools" / "backend-src"
 SRC_ZIP = ROOT / "android" / "app" / "src" / "main" / "assets" / "backend" / "python-backend.zip"
-MOBILE_ZIP = ROOT / "internal" / "mobile" / "app" / "src" / "main" / "assets" / "backend" / "python-backend.zip"
 TMP_ZIP = ROOT / "tools" / "python-backend-new.zip"
 
 # Embedded Python runtime: live API, HLS relay and team fallback artwork only.
@@ -102,10 +101,8 @@ def main() -> None:
         TMP_ZIP.unlink()
     build_archive(SRC_DIR, TMP_ZIP)
     atomic_copy_file(TMP_ZIP, SRC_ZIP)
-    atomic_copy_file(TMP_ZIP, MOBILE_ZIP)
     TMP_ZIP.unlink()
     print(f"TV 后端包：{SRC_ZIP} ({SRC_ZIP.stat().st_size} bytes)")
-    print(f"移动版后端包：{MOBILE_ZIP} ({MOBILE_ZIP.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":

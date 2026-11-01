@@ -2,7 +2,6 @@ param(
     [string]$Adb = '',
     [string[]]$Targets = @(),
     [string]$TvApk = '',
-    [string]$MobileApk = '',
     [switch]$InstallApks,
     [int]$Minutes = 10,
     [int]$MatchesPerVariant = 3,
@@ -16,7 +15,6 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $TV_PACKAGE = 'com.qiubo.optimaltv.public'
-$MOBILE_PACKAGE = 'com.qiubo.optimaltv.mobile.public'
 $PROBE_ENTRIES = [System.Collections.Generic.List[object]]::new()
 $MONITOR_RECORDS = @()
 $ACTIVE_JOBS = [System.Collections.Generic.List[object]]::new()
@@ -101,9 +99,10 @@ function ConvertTo-Target([string]$Spec) {
     $label = if ($parts.Count -eq 4) { $parts[3].Trim() } else { '' }
     if (!$serial) { throw "Target serial is empty: $Spec" }
     if ($matchId -notmatch '^\d+$') { throw "Target matchId must be numeric: $Spec" }
-    $variant = if ($package -eq $TV_PACKAGE) { 'tv' } elseif ($package -eq $MOBILE_PACKAGE) { 'mobile' } else {
+    if ($package -ne $TV_PACKAGE) {
         throw "Unknown package in target: $package"
     }
+    $variant = 'tv'
     $safeId = ($serial + '-' + $matchId + '-' + $variant) -replace '[^A-Za-z0-9._-]', '-'
     return [pscustomobject][ordered]@{
         id = $safeId
@@ -177,7 +176,6 @@ $Control = [ordered]@{
     delayProbeSeconds = $DelayProbeSeconds
     maxStartupSkewSeconds = $MaxStartupSkewSeconds
     apiBase = $ApiBase
-    requireBothVariants = $true
     requireMatchesPerVariant = $true
     maxSourceRelativeDelaySeconds = 5
     maxDelayGrowthSeconds = 2
@@ -187,13 +185,11 @@ $matrix = @($Targets | ForEach-Object { ConvertTo-Target $_ })
 if (@($matrix.id | Select-Object -Unique).Count -ne $matrix.Count) { throw 'Target IDs must be unique.' }
 if (@($matrix.serial | Select-Object -Unique).Count -ne $matrix.Count) { throw 'Every target requires an independent device serial.' }
 $variantCoverage = @{}
-foreach ($variant in @('tv','mobile')) {
-    $variantTargets = @($matrix | Where-Object variant -eq $variant)
-    if ($variantTargets.Count -eq 0) { throw "Target matrix is missing the $variant variant." }
-    $variantCoverage[$variant] = @($variantTargets.matchId | Select-Object -Unique).Count
-    if ($variantCoverage[$variant] -lt $MatchesPerVariant) {
-        throw "$variant must cover at least $MatchesPerVariant distinct matches; found $($variantCoverage[$variant])."
-    }
+$variantTargets = @($matrix | Where-Object variant -eq 'tv')
+if ($variantTargets.Count -eq 0) { throw 'Target matrix is missing the TV variant.' }
+$variantCoverage.tv = @($variantTargets.matchId | Select-Object -Unique).Count
+if ($variantCoverage.tv -lt $MatchesPerVariant) {
+    throw "tv must cover at least $MatchesPerVariant distinct matches; found $($variantCoverage.tv)."
 }
 $uniqueMatches = @($matrix.matchId | Select-Object -Unique)
 if ($uniqueMatches.Count -lt 3) { throw 'At least three distinct match IDs are required.' }
@@ -227,11 +223,10 @@ if (!$ffmpeg) { throw 'ffmpeg is required for source-relative delay comparison.'
 & $PythonExe -B -c "import PIL, numpy; print('ok')" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Python PIL and numpy are required for delay comparison.' }
 
-if (!$TvApk -or !$MobileApk) {
-    throw 'Release acceptance requires -TvApk and -MobileApk so installed APK hashes and embedded backend can be pinned.'
+if (!$TvApk) {
+    throw 'Release acceptance requires -TvApk so the installed APK hash and embedded backend can be pinned.'
 }
 $TvApk = (Resolve-Path -LiteralPath $TvApk).Path
-$MobileApk = (Resolve-Path -LiteralPath $MobileApk).Path
 $sourceProxyHash = Get-Sha256File $SourceProxy
 $candidates = [ordered]@{
     tv = [ordered]@{
@@ -241,15 +236,8 @@ $candidates = [ordered]@{
         sourceProxySha256 = $sourceProxyHash
         backendMatchesSource = $false
     }
-    mobile = [ordered]@{
-        apkFileName = (Split-Path -Leaf $MobileApk)
-        apkSha256 = (Get-Sha256File $MobileApk)
-        embeddedBackendProxySha256 = (Get-EmbeddedBackendProxyHash $MobileApk)
-        sourceProxySha256 = $sourceProxyHash
-        backendMatchesSource = $false
-    }
 }
-foreach ($variant in @('tv','mobile')) {
+foreach ($variant in @('tv')) {
     $candidates[$variant].backendMatchesSource = (
         $candidates[$variant].embeddedBackendProxySha256 -eq $candidates[$variant].sourceProxySha256
     )
@@ -438,8 +426,7 @@ try {
     $script:OutputRoot = (Resolve-Path -LiteralPath $OutputDirectory).Path
 
     foreach ($target in $matrix) {
-        $expectedHash = $candidates.mobile.apkSha256
-        if ($target.variant -eq 'tv') { $expectedHash = $candidates.tv.apkSha256 }
+        $expectedHash = $candidates.tv.apkSha256
         $target | Add-Member -NotePropertyName evidenceDirectory -NotePropertyValue ('runs/' + $target.id) -Force
         $target | Add-Member -NotePropertyName expectedApkSha256 -NotePropertyValue $expectedHash -Force
     }
@@ -469,7 +456,7 @@ try {
     foreach ($target in $matrix) {
         $targetDirectory = Join-Path $script:OutputRoot $target.evidenceDirectory
         New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
-        $apkPath = if ($target.variant -eq 'tv') { $TvApk } else { $MobileApk }
+        $apkPath = $TvApk
         if ($InstallApks) {
             $installOutput = @(& $AdbPath -s $target.serial install -r -d $apkPath 2>&1)
             $installText = ($installOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
@@ -483,7 +470,7 @@ try {
     }
 
     foreach ($target in $matrix) {
-        foreach ($testPackage in @($TV_PACKAGE, $MOBILE_PACKAGE)) {
+        foreach ($testPackage in @($TV_PACKAGE)) {
             & $AdbPath -s $target.serial shell am force-stop $testPackage 2>&1 | Out-Null
         }
         $clearOutput = @(& $AdbPath -s $target.serial logcat -b all -c 2>&1)

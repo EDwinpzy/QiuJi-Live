@@ -132,7 +132,7 @@ class TeamIconFetchResilienceTest(unittest.TestCase):
         self.assertTrue(all(ok for _d, ok in results), "所有并发调用都应成功")
         self.assertEqual(len(calls), 1, "同一 URL 并发只应打上游 1 次，实测 %d 次" % len(calls))
 
-    def test_timeout_is_long_enough_for_slow_mobile_network(self):
+    def test_timeout_is_long_enough_for_slow_networks(self):
         """单次超时要够长：实测设备到 CDN 单个 SVG 要 5~6s，本机只要 0.9s。
 
         原先 `urlopen(timeout=6)` 配上三次重试的退避，在慢网络下仍会全军覆没

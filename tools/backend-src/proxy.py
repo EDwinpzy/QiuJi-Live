@@ -166,7 +166,7 @@ def _web_static_root() -> Path:
 SOURCE_MIRRORS = [SOURCE_URL]
 _active_source = {"i": 0, "url": SOURCE_MIRRORS[0]}
 # APK 应用内更新清单由后台写入 CloudBase 公开桶；网页函数只负责以稳定的
-# /web/apk-update/{tv,mobile}.json 地址代理它，避免每次发 APK 都重新部署网页函数。
+# /web/apk-update/tv.json 地址代理它，避免每次发 APK 都重新部署网页函数。
 APK_UPDATE_OBJECT_BASE = os.environ.get(
     "OTV_APK_UPDATE_OBJECT_BASE",
     "https://appletv-d5ge1bth794873f76.api.tcloudbasegateway.com/v1/storages/object/hotupdate",
@@ -3700,7 +3700,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _apk_update_manifest(self, parsed):
         """代理后台发布的公开 APK 清单，不把 APK 二进制经过网页函数。"""
-        match = re.fullmatch(r"/apk-update/(tv|mobile)\.json", parsed.path)
+        match = re.fullmatch(r"/apk-update/tv\.json", parsed.path)
         if not match:
             return False
         key = f"apk-update/{match.group(1)}.json"

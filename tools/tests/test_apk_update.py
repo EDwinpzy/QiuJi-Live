@@ -62,15 +62,25 @@ def test_certificate_normalization_rejects_bad_digest():
 def test_manifest_rejects_non_https_and_invalid_floor():
     with pytest.raises(ValueError, match="HTTPS"):
         build_manifest(
-            channel="mobile", version_code=35, version_name="1.33",
+            channel="tv", version_code=35, version_name="1.33",
             min_supported_version_code=34, force_update=False, title="",
             changelog=[], file_name="MyTV.apk", apk_url="http://example.test/a.apk",
             size_bytes=1, sha256="b" * 64,
         )
     with pytest.raises(ValueError, match="最低支持版本"):
         build_manifest(
-            channel="mobile", version_code=35, version_name="1.33",
+            channel="tv", version_code=35, version_name="1.33",
             min_supported_version_code=36, force_update=False, title="",
+            changelog=[], file_name="MyTV.apk", apk_url="https://example.test/a.apk",
+            size_bytes=1, sha256="b" * 64,
+        )
+
+
+def test_mobile_channel_is_rejected_after_tv_only_cutover():
+    with pytest.raises(ValueError, match="版本渠道必须是 tv"):
+        build_manifest(
+            channel="mobile", version_code=35, version_name="1.33",
+            min_supported_version_code=0, force_update=False, title="",
             changelog=[], file_name="MyTV.apk", apk_url="https://example.test/a.apk",
             size_bytes=1, sha256="b" * 64,
         )
@@ -126,7 +136,7 @@ def test_manifest_with_parts_uses_sharded_schema():
 
 def test_single_object_manifest_keeps_schema_one_and_empty_parts():
     manifest = build_manifest(
-        channel="mobile", version_code=35, version_name="1.33",
+        channel="tv", version_code=35, version_name="1.33",
         min_supported_version_code=0, force_update=False, title="",
         changelog=[], file_name="MyTV.apk",
         apk_url="https://example.test/a.apk", size_bytes=10, sha256="b" * 64,

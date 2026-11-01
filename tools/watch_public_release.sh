@@ -27,8 +27,8 @@ while true; do
     fi
   fi
   # C) 目录异动：本项目根出现内测/公测语义的新目录（另一会话整理文件夹）
-  for d in 内测版 公测版 beta public internal/tv public/tv public/mobile; do
-    if [ -e "$d" ] && [ "$d" != "internal/mobile" ]; then
+  for d in 内测版 公测版 beta public internal/tv public/tv; do
+    if [ -e "$d" ]; then
       echo "SIGNAL=layout $d $(date)" >> tools/out/public_release_detected.txt
       echo "目录异动：$d 出现（另一会话在整理结构）"
       exit 0

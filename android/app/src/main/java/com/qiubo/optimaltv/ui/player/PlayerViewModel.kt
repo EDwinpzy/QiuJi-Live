@@ -915,7 +915,7 @@ private fun startStallMonitor() {
         return if (n > 0) (sum * 1000).toLong() to (longest * 1000).toLong() else 0L to 0L
     }
 
-    /** Bounded live recovery ladder shared with the mobile client. */
+    /** Bounded live recovery ladder for the TV player. */
     private fun recoverPlaybackStall(reason: String) {
     val state = _ui.value
     if (!hasEngine() || state.fatalMsg != null) return
@@ -1161,7 +1161,7 @@ fun switchLine(idx: Int) {
         }
     }
 
-    // ---- v1.21 DLNA 投屏：2026-09-11 随需求⑭追加从 TV 版整体剥离（移动版保留）----
+    // ---- v1.21 DLNA 投屏：2026-09-11 随需求⑭追加从 TV 版整体剥离 ----
 
     private fun touch() = Unit
 

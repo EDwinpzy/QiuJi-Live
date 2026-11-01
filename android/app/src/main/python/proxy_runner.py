@@ -52,8 +52,8 @@ def start(backend_dir, port=8090, api_base_url=None, migration_ca_path=None):
     import proxy
 
     def _run():
-        # 端口共存自愈（TV 版/移动版同装一台设备时 8090 只有一方能绑定；
-        # 先绑定的一方服务整机 loopback，两边 app 都能访问）。若本进程起晚了
+        # 端口共存自愈（同机旧进程或调试实例占用 8090 时只有一方能绑定；
+        # 绑定方服务整机 loopback）。若本进程起晚了
         # 绑定失败（Address already in use），后台每 5s 重试——绑定方进程一旦
         # 被系统回收释放端口，本进程立即接管，避免「后端凭空消失」。
         # v1.21 投屏：bind 0.0.0.0——电视（DLNA 渲染器）需经局域网访问本机
