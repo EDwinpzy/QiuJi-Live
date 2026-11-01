@@ -1,6 +1,6 @@
 # 球迹直播 · QiuJi Live
 
-> 面向 Android TV 与投影仪的足球直播客户端，内置 Python 本机后端，支持 HLS 直播播放、线路切换、播放恢复与应用内更新校验。
+> 面向 Android TV 与投影仪的足球直播客户端，内置 Python 本机后端，支持 HLS 直播播放、线路切换、播放恢复和 GitHub Release 手动分发。
 
 **品牌：** 球迹直播（英文：QiuJi Live）
 **工程仓库：** `football-live`
@@ -13,7 +13,7 @@
 | 交付客户端 | Android TV / 投影仪 |
 | 播放能力 | HLS 播放、本机中继、线路切换、首帧恢复、播放健康检查 |
 | 后端形态 | Python 后端随客户端 APK 内嵌运行 |
-| 更新链路 | 版本清单检查、APK 分片与整包 SHA-256 校验、签名证书校验、系统安装 |
+| 分发方式 | GitHub Release 发布完整 TV APK；应用内不使用云端热更新或 APK 更新 |
 | 产品边界 | 不提供 Windows、iOS、独立网页或影视点播客户端 |
 | 发布策略 | 仅在用户当前请求中明确授权后执行 |
 
@@ -37,8 +37,8 @@
 - 处理换线、重试、首帧恢复和长播放健康检查。
 - TV 端支持遥控器方向键、OK 和返回键焦点导航。
 - 客户端启动内嵌 Python 后端，通过本机 HTTP 服务处理赛程、队徽、直播流和分片请求。
-- 应用内检查更新清单，校验 APK 分片、整包 SHA-256 和签名证书，再进入 Android 系统安装流程。
-- 自托管服务提供健康检查、更新清单、对象存储和静态资源兼容入口。
+- 正式 APK 不包含云端热更新、应用内 APK 更新、安装权限或私有 CA。
+- 新版本通过 GitHub Release 手动下载并覆盖安装；赛程和直播播放不依赖项目自建服务器。
 
 ### 客户端
 
@@ -61,15 +61,16 @@ Android TV / 投影仪
               ▼
         上游真实直播源
 
-自托管服务 ── 健康检查、更新清单、对象存储与升级兼容入口
+GitHub Releases ── 手动发布和下载完整 TV APK（不在应用内联网更新）
 ```
 
 核心约束：
 
-- 原生客户端负责界面、遥控交互、播放器状态和系统安装流程。
+- 原生客户端负责界面、遥控交互、播放器状态和本机播放链路。
 - Python 后端随 APK 内嵌，不要求用户单独安装或启动服务。
 - HLS 播放链路同时包含 Media3 与故障恢复策略；真实直播验收不能只验证首页或静态视频。
-- 更新包必须通过 HTTPS 获取，并完成分片/整包摘要和签名证书校验。
+- TV 是唯一交付客户端；赛程、线路解析、队徽和 HLS 中继由 APK 内嵌后端完成。
+- 项目自建服务器已不再参与客户端运行或更新；外部直播源、队徽 CDN 和 HLS CDN 仍由公网提供。
 
 ### 目录结构
 
@@ -78,8 +79,8 @@ Android TV / 投影仪
 | `android/` | Android TV 客户端、内嵌 Python 后端与资源 |
 | `tools/backend-src/` | 内嵌 Python 后端、足球数据源、HLS 中继及契约测试 |
 | `tools/qa/` | 真实直播采集、延迟对照和验收评估工具 |
-| `tools/` | 后端打包、APK 更新发布、资源和运维检查脚本 |
-| `deploy/selfhosted/` | 自托管健康检查、更新服务与部署配置 |
+| `tools/` | 后端打包、QA、资源和契约检查脚本 |
+| `deploy/selfhosted/` | 已停用的历史自托管配置，仅用于旧版本追溯 |
 | `apk/` | 本地构建归档目录；生成物不应替代源码验证 |
 | `docs/项目文档.md` | 唯一详细项目文档 |
 | `.learnings/` | 本机调试经验，不纳入 Git |
@@ -89,7 +90,7 @@ Android TV / 投影仪
 
 - 只交付 Android TV / 投影仪客户端。
 - Windows、iOS 和独立网页客户端已移除，不再提供构建入口或产品验收面。
-- 服务端保留的 `www/`、`/web/` 仅服务于 TV 客户端的更新清单、健康检查、静态资源兼容和升级链路，不是第二个客户端。
+- 仓库保留的 `www/` 仅作为内嵌后端兼容静态资源，不是第二个客户端，也不代表仍有云端服务。
 - 影视、点播、IPTV、会员和后台管理产品面已移除，不应重新开放。
 - 仓库整理和发布不得重新引入已下线的客户端、业务模块或旧影视运行时。
 
@@ -143,42 +144,33 @@ Push-Location .\android
 Pop-Location
 ```
 
-Release 构建有正式入口门槛：必须传入已验收的 HTTPS API origin。
+Serverless TV Release 不编译任何云端 API 或更新端点：
 
 ```powershell
 Push-Location .\android
-.\gradlew.bat assembleRelease -PapiBaseUrl=https://<已验收的正式域名>
+.\gradlew.bat assembleRelease
 Pop-Location
 ```
 
-也可以通过环境变量 `OTV_RELEASE_API_BASE_URL` 提供同一入口。自建 VPS 的 IP 迁移入口不是默认授权路径；只有明确接受该入口时，才按构建门槛同时传入配套的 `-PallowIpReleaseOrigin=true`。不得用裸 `assembleRelease` 绕过或省略入口校验。
+正式包固定使用 `HOTUPDATE_ENABLED=false`、`APK_UPDATE_ENABLED=false`，不写入更新地址，
+也不申请 `REQUEST_INSTALL_PACKAGES` 权限。不得把已停用的云端更新入口重新加回 TV 构建。
 
 修改后端后，必须在构建 APK 前运行 `python tools/build_backend_zip.py`，确保 TV APK 内嵌的 `python-backend.zip` 与源码一致。
 
 ### 发布
 
-发布、部署、应用内更新包上传、提交和推送都必须由用户在当前请求中明确授权。未获得当前授权时，只做本地测试和构建检查。
+发布、构建、提交和推送都必须由用户在当前请求中明确授权。未获得当前授权时，只做本地测试和构建检查。
 
 获得授权后，按以下顺序串行执行：
 
 1. 检查共享工作区和其他活动任务，确认未混入他人未提交改动。
-2. 运行后端、工具和 TV 测试，并完成 TV Release 编译。
-3. 使用 `python tools/release_all.py --deploy` 构建并部署自托管服务。该步骤会重建后端包、执行数据库迁移、更新 Compose、检查并重载 nginx。
-4. 部署完成后重建 TV APK，确保 APK 内嵌后端与部署产物一致。
-5. 核对实际 APK、内嵌 `python-backend.zip`、TV 更新清单和对象存储回读摘要。
-6. 如需发布 TV 应用内更新，使用现有发布脚本：
+2. 如后端源码有改动，运行 `python tools/build_backend_zip.py`，再运行后端、工具和 TV 测试。
+3. 构建 `assembleRelease`，保持 `com.qiubo.optimaltv.public` 和既有签名证书不变。
+4. 核对 APK 版本单调递增、内嵌后端与源码一致，并确认没有云端更新端点、安装权限和私有 CA。
+5. 在投影仪覆盖安装，验证首页、遥控焦点和真实直播；记录截图、日志、版本和 SHA-256。
+6. 提交并推送，创建仅包含完整 TV APK 的 GitHub Release，重新下载后核对 SHA-256。
 
-```powershell
-python tools/publish_apk_update.py `
-  --channel tv `
-  --apk "apk\TV版\QiuJiLive-TV.apk" `
-  --version-code <version-code> `
-  --version-name <version-name> `
-  --cert <signing-certificate-sha256> `
-  --note "<update-note>"
-```
-
-发布前必须确认 `versionCode` 严格递增、APK 签名证书匹配、分片和整包 SHA-256 可回读验证。
+当前发布模式不部署球迹直播服务器，不生成热更新包或 APK 分片清单。
 
 详细发布门槛、共享工作区规则和回滚检查见 [docs/项目文档.md](docs/项目文档.md) 与根目录 [AGENTS.md](AGENTS.md)。不要自行触发生产发布或另行分配版本号。
 
@@ -218,7 +210,7 @@ python tools/publish_apk_update.py `
 
 ### Overview
 
-**QiuJi Live** (Chinese brand: **球迹直播**) is a football live-streaming application delivered only for Android TV and projectors. Users can browse football fixtures and match status, choose an available live source for a match, and watch HLS streams in the player.
+**QiuJi Live** (Chinese brand: **球迹直播**) is a football live-streaming application delivered only for Android TV and projectors. Users can browse football fixtures and match status, choose an available live source for a match, and watch HLS streams in the player. Releases are distributed manually as complete APKs through GitHub Releases.
 
 The product display name is unified as “球迹直播”. The engineering repository remains **`football-live`**. **`QiuJiLive`** is used where spaces are unsuitable, such as APK filenames.
 
@@ -230,8 +222,8 @@ The product display name is unified as “球迹直播”. The engineering repos
 - Handle source switching, retries, first-frame recovery, and long-playback health checks.
 - Support D-pad, OK, and Back focus navigation on Android TV.
 - Start an embedded Python backend that serves fixtures, team artwork, live streams, and segments over local HTTP.
-- Check update manifests and validate APK segments, whole-package SHA-256, and signing certificates before invoking the Android installer.
-- Use a self-hosted service for health checks, update manifests, object storage, and static-resource compatibility.
+- Ship release APKs without backend hot updates, in-app APK updates, install permissions, or a private CA.
+- Distribute new versions as complete APK downloads from GitHub Releases; fixtures and playback do not depend on a project-operated server.
 
 ### Clients
 
@@ -254,15 +246,16 @@ Android TV / projector
               ▼
           Real upstream live source
 
-Self-hosted service ── health checks, update manifests, object storage, and upgrade compatibility
+GitHub Releases ── manual publication/download of the complete TV APK (no in-app network update)
 ```
 
 Key constraints:
 
-- The native client owns the UI, remote interaction, player state, and Android installation flow.
+- The native client owns the UI, remote interaction, player state, and local playback path.
 - The Python backend is embedded in the APK; users do not need to install or start it separately.
 - The HLS path includes Media3 playback and recovery policies. Home-screen checks or static test videos do not prove live-stream acceptance.
-- Update packages must be fetched over HTTPS and must pass segment/package digest and signing-certificate validation.
+- TV is the only delivered client. Fixtures, source resolution, team artwork, and HLS relay run in the embedded backend.
+- The retired project server is not part of client runtime or updates. External fixture sites, logo CDNs, and HLS CDNs remain public-network dependencies.
 
 ### Repository layout
 
@@ -271,8 +264,8 @@ Key constraints:
 | `android/` | Android TV client, embedded Python backend, and resources |
 | `tools/backend-src/` | Embedded Python backend, football data sources, HLS relay, and contract tests |
 | `tools/qa/` | Real-live capture, delay comparison, and acceptance evaluation tools |
-| `tools/` | Backend packaging, APK update publishing, asset generation, and operations checks |
-| `deploy/selfhosted/` | Self-hosted health-check, update, and deployment configuration |
+| `tools/` | Backend packaging, QA, asset generation, and contract checks |
+| `deploy/selfhosted/` | Retired historical self-hosted configuration kept for legacy traceability |
 | `apk/` | Local build archive; generated files do not replace source validation |
 | `docs/项目文档.md` | The single detailed project document |
 | `.learnings/` | Local debugging notes, not tracked by Git |
@@ -282,7 +275,7 @@ Key constraints:
 
 - Only the Android TV / projector client is delivered.
 - The Windows, iOS, and standalone web clients have been removed and no longer have build entry points or product acceptance surfaces.
-- The retained `www/` and `/web/` paths serve only the TV client's update manifest, health checks, static-resource compatibility, and upgrade path. They are not a second client.
+- The retained `www/` path contains compatibility assets for the embedded backend. It is not a second client and does not imply that a cloud service is still running.
 - Movie-on-demand, VOD, IPTV, membership, and admin product surfaces have been removed and must not be reopened.
 - Repository cleanup and releases must not reintroduce retired clients, business modules, or the old film runtime.
 
@@ -336,42 +329,33 @@ Push-Location .\android
 Pop-Location
 ```
 
-Release builds require an explicitly approved HTTPS API origin:
+Serverless TV releases compile no cloud API or update endpoint:
 
 ```powershell
 Push-Location .\android
-.\gradlew.bat assembleRelease -PapiBaseUrl=https://<approved-production-origin>
+.\gradlew.bat assembleRelease
 Pop-Location
 ```
 
-The same origin can be supplied through `OTV_RELEASE_API_BASE_URL`. The self-hosted VPS IP migration origin is not the default release path; only when that migration entry point is explicitly accepted should the matching `-PallowIpReleaseOrigin=true` option be supplied. Do not bypass or omit the origin gate with a bare `assembleRelease`.
+Release builds use `HOTUPDATE_ENABLED=false` and `APK_UPDATE_ENABLED=false`, contain no update URL,
+and do not request `REQUEST_INSTALL_PACKAGES`. Do not reintroduce the retired cloud-update path.
 
 After backend changes, run `python tools/build_backend_zip.py` before building the APK so the embedded `python-backend.zip` matches the source.
 
 ### Release
 
-A release, deployment, in-app update upload, commit, or push requires explicit authorization in the user's current request. Without that authorization, limit work to local tests and build checks.
+A release build, publication, commit, or push requires explicit authorization in the user's current request. Without that authorization, limit work to local tests and build checks.
 
 When authorized, execute the following serially:
 
 1. Check the shared worktree and other active tasks; do not include unrelated uncommitted changes.
-2. Run backend, tooling, and TV tests, and complete the TV Release compilation.
-3. Run `python tools/release_all.py --deploy` to build and deploy the self-hosted service. This rebuilds the backend package, applies database migrations, updates Compose, validates/recreates nginx, and reloads the proxy.
-4. Rebuild the TV APK after deployment so the embedded backend matches the deployed artifacts.
-5. Verify the APK, embedded `python-backend.zip`, TV update manifest, and object-storage read-back digests.
-6. To publish a TV in-app update, use the existing publisher:
+2. Rebuild `python-backend.zip` if backend source changed, then run backend, tooling, and TV tests.
+3. Run `assembleRelease`, keeping `com.qiubo.optimaltv.public` and the existing signing certificate.
+4. Verify a monotonically increasing `versionCode`, a matching embedded backend, and the absence of cloud update endpoints, install permission, and private CA.
+5. Install over the previous projector build and verify the home screen, D-pad navigation, and a real live stream; archive screenshots, logs, version, and SHA-256.
+6. Commit, push, and create a GitHub Release containing only the complete TV APK; download it again and verify its SHA-256.
 
-```powershell
-python tools/publish_apk_update.py `
-  --channel tv `
-  --apk "apk\TV版\QiuJiLive-TV.apk" `
-  --version-code <version-code> `
-  --version-name <version-name> `
-  --cert <signing-certificate-sha256> `
-  --note "<update-note>"
-```
-
-Before publishing, confirm a strictly increasing `versionCode`, a matching signing certificate, and read-back-verifiable segment and whole-package SHA-256 values.
+The current release model does not deploy a QiuJi Live server and does not build hot-update archives or APK segment manifests.
 
 See [docs/项目文档.md](docs/项目文档.md) and [AGENTS.md](AGENTS.md) for detailed release gates, shared-worktree rules, and rollback checks. Do not start a production release or allocate a version independently.
 

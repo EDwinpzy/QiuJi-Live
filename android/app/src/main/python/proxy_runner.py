@@ -15,6 +15,12 @@ from urllib.parse import urlsplit
 def configure_api_environment(api_base_url, migration_ca_path):
     """Point embedded web fallbacks at this APK's backend and trust its private CA."""
     origin = str(api_base_url or "").strip().rstrip("/")
+    ca_path = str(migration_ca_path or "").strip()
+    if not origin and not ca_path:
+        os.environ.pop("OTV_APK_UPDATE_OBJECT_BASE", None)
+        return
+    if not origin or not ca_path:
+        raise ValueError("api_base_url and migration_ca_path must be configured together")
     try:
         parsed = urlsplit(origin)
         port = parsed.port
@@ -25,8 +31,7 @@ def configure_api_environment(api_base_url, migration_ca_path):
             or (port is not None and not 1 <= port <= 65535)):
         raise ValueError("api_base_url must be an HTTPS origin")
     origin = f"https://{parsed.netloc}"
-    ca_path = str(migration_ca_path or "").strip()
-    if not ca_path or not os.path.isfile(ca_path):
+    if not os.path.isfile(ca_path):
         raise ValueError("migration CA file is missing")
 
     context = ssl.create_default_context()
@@ -40,8 +45,6 @@ def configure_api_environment(api_base_url, migration_ca_path):
 
 def start(backend_dir, port=8090, api_base_url=None, migration_ca_path=None):
     """启动内置后端（阻塞前先 setpath 再起线程）。"""
-    if api_base_url is None or migration_ca_path is None:
-        raise ValueError("api_base_url and migration_ca_path are required")
     configure_api_environment(api_base_url, migration_ca_path)
     sys.path.insert(0, backend_dir)
     # Hot-update extraction replaces backend_dir.  Store scraped metadata beside it

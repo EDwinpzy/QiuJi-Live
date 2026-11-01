@@ -101,11 +101,13 @@ class App : android.app.Application(), ImageLoaderFactory {
         // 拉起 :backend 后端进程（App.onCreate 分叉内自启 python）
         BackendService.ensure(this)
         Graph.init(this)
-        // v1.18 公测版：热更新（内测版 HOTUPDATE_ENABLED=false 时为空操作）；
-        // v1.20 起 check 与下载分离：check 快速结束不阻塞进 app，非强更弹窗让用户选
-        com.qiubo.optimaltv.hotupdate.HotUpdateManager.init(this)
-        // APK 应用内更新：清单检查失败时静默放行，下载完成后调起系统安装器
-        com.qiubo.optimaltv.apkupdate.ApkUpdateManager.init(this)
+        // Serverless releases ship the backend and updates manually via GitHub Releases.
+        if (BuildConfig.HOTUPDATE_ENABLED) {
+            com.qiubo.optimaltv.hotupdate.HotUpdateManager.init(this)
+        }
+        if (BuildConfig.APK_UPDATE_ENABLED) {
+            com.qiubo.optimaltv.apkupdate.ApkUpdateManager.init(this)
+        }
         AppStartup.begin()
     }
 

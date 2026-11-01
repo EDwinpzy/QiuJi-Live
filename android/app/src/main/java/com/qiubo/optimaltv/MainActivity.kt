@@ -144,20 +144,26 @@ class MainActivity : ComponentActivity() {
         BackendService.ensure(this)
         com.qiubo.optimaltv.lifecycle.AppLifecycleManager.onForeground()
         com.qiubo.optimaltv.OtvLog.i("activity ON_RESUME（窗口可见）")
-        // v1.20 热更自动重启：后台完成下载的更新在回前台时立即生效
-        com.qiubo.optimaltv.hotupdate.HotUpdateManager.onForegroundChanged(true)
-        // 从“允许安装未知应用”系统设置返回时，继续 APK 下载并调起安装器
-        com.qiubo.optimaltv.apkupdate.ApkUpdateManager.onForegroundChanged(true)
+        if (BuildConfig.HOTUPDATE_ENABLED) {
+            com.qiubo.optimaltv.hotupdate.HotUpdateManager.onForegroundChanged(true)
+        }
+        if (BuildConfig.APK_UPDATE_ENABLED) {
+            com.qiubo.optimaltv.apkupdate.ApkUpdateManager.onForegroundChanged(true)
+        }
     }
 
     override fun onPause() {
         com.qiubo.optimaltv.lifecycle.AppLifecycleManager.onBackground()
         super.onPause()
         com.qiubo.optimaltv.OtvLog.i("activity ON_PAUSE")
-        com.qiubo.optimaltv.hotupdate.HotUpdateManager.onForegroundChanged(false)
+        if (BuildConfig.HOTUPDATE_ENABLED) {
+            com.qiubo.optimaltv.hotupdate.HotUpdateManager.onForegroundChanged(false)
+        }
     }
     override fun onStop() {
-        com.qiubo.optimaltv.apkupdate.ApkUpdateManager.onForegroundChanged(false)
+        if (BuildConfig.APK_UPDATE_ENABLED) {
+            com.qiubo.optimaltv.apkupdate.ApkUpdateManager.onForegroundChanged(false)
+        }
         super.onStop()
         com.qiubo.optimaltv.OtvLog.w("activity ON_STOP（黑屏若发生在此后，见播放器/焦点日志上下文）")
     }
@@ -236,7 +242,6 @@ private fun AppRoot() {
             )
         }
         }
-        // Backend hot updates remain silent; APK updates may still show their update UI.
-        com.qiubo.optimaltv.ui.components.ApkUpdateUi()
+        // Serverless releases do not compile an update endpoint, so no update overlay is mounted.
     }
 }

@@ -15,26 +15,34 @@
 > **仅在用户明确要求发布时检查并执行**：发布对共享工作区有影响；执行前用 `codex_app` 的 `list_threads` 看本仓库
 > （`D:\MyProjects\球迹直播`）还有没有其它 `status=active` 的对话：
 > - **没有** → 按下面 1~6 步执行用户要求的流水线；
-> - **还有** → 不构建 APK、不部署、不上传、不提交、不推送，先报告并等用户安排。
+> - **还有** → 不构建 APK、不发布、不提交、不推送，先报告并等用户安排。
 >
-> 发布前 `git status` 要干净：别人未提交的改动不要打包进去。目的：避免热更版本号抢占、
-> 半成品上线、APK 内嵌 zip 与构建产物不一致。不要用定时任务触发发布；只在用户明确要求发布的当前对话中执行这些检查。
+> 发布前核对 `git status`：只允许本轮明确范围内的改动，别人未提交的改动不要打包进去。
+> 目的：避免版本号抢占、半成品发布、APK 内嵌 zip 与源码不一致。不要用定时任务触发发布；
+> 只在用户明确要求发布的当前对话中执行这些检查。
 
-1. 测试：后端改动跑 `tools/backend-src/tests` 球迹直播测试；Kotlin 侧以 `assembleRelease` 编译通过兜底。
-2. 部署更新服务并重建产物：`python tools/release_all.py --deploy`。
-3. 构建 APK：在 `android` 运行一次 `.\gradlew.bat assembleRelease`（自动归档到 `apk/TV版/QiuJiLive-TV.apk`）。
-4. 如需发布 Android TV 应用内更新包，使用 `python tools/publish_apk_update.py --channel tv --apk <APK路径> --version-code <版本号> --version-name <版本名> --cert <签名证书SHA-256>`；按工具提示补齐更新说明和发布参数。热更新管理后台及其上传脚本已删除。
+1. 测试：后端改动跑 `tools/backend-src/tests` 球迹直播测试；工具改动跑 `tools/tests`；
+   Kotlin 侧运行 `testDebugUnitTest`，并以 `assembleRelease` 编译通过兜底。
+2. 如后端源码有改动，先运行 `python tools/build_backend_zip.py` 重建 TV 内嵌后端。
+3. 构建 APK：在 `android` 运行一次 `.\gradlew.bat assembleRelease`
+   （自动归档到 `apk/TV版/QiuJiLive-TV.apk`）。
+4. 核对版本、签名、内嵌后端和 APK 内容：保持 `com.qiubo.optimaltv.public` 与既有证书；
+   确认 `HOTUPDATE_ENABLED=false`、`APK_UPDATE_ENABLED=false`、没有云端更新地址、
+   安装权限或私有 CA；在投影仪覆盖安装并完成首页、遥控和真实直播验证。
 5. 更新文档：把本次变更摘要与实测证据写进 `docs/项目文档.md` 对应章节
    （全项目只保留 `README.md` 与 `docs/项目文档.md` 两份文档）。
-6. 提交并推送：`git add -A` → commit → `git push origin main`。
+6. 提交并推送：按本轮文件范围 `git add` → commit → `git push origin main`；
+   然后创建仅包含 TV APK 的 GitHub Release。当前发布模式不部署球迹直播服务端。
 
 ### 顺序与口径
 
-- `tools/release_all.py` 构建球迹直播后端 zip；完成后再重打 APK，确保 APK 内嵌 zip 与构建产物一致。
-- 并发期间只提交代码与文档是安全的；**应用更新版本号与 APK 产物以最后一次统一构建为准**，
-  中途任务不要再单独上传更新包或另发 APK 版本。
-- 发布后自检：线上热更包 sha256 与本地 zip 一致；
-  两个 APK 内嵌 zip 的 `proxy.py`、`vlc_hls.py`、`team_backdrop.py`、`www/app.js` 与 `tools/backend-src` 逐一一致，并确认没有旧影视 runtime 模块。
+- TV 是唯一交付客户端；不得重新加入移动版、独立网页、旧影视 runtime 或双端发布入口。
+- `tools/build_backend_zip.py` 构建的内嵌后端必须先于 APK 构建完成；
+  APK 内 `assets/backend/python-backend.zip` 必须与本地构建产物逐字节一致。
+- 分发只使用 GitHub Releases 的完整 TV APK；不构建 APK 分片清单、不部署更新服务、
+  不提供应用内热更新或应用内 APK 更新。
+- 发布后自检：GitHub Release 资产只有 TV APK；重新下载后的 SHA-256 与本地 APK 一致；
+  安装包无云端更新端点、安装权限和私有 CA，并在投影仪完成冷启动和真实播放复验。
 - 仍要先问的情况：不可恢复的破坏性操作（历史重写、删数据、下线在跑的东西），以及需要用户做产品取舍的改动。
 
 ## 文档
