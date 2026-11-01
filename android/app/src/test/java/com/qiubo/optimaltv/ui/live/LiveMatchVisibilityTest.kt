@@ -30,6 +30,40 @@ class LiveMatchVisibilityTest {
     }
 
     @Test
+    fun leagueFiltersApplyToUpcomingMatchesAndStillHideFinishedMatches() {
+        fun match(
+            id: String,
+            league: String,
+            home: String = "甲队",
+            away: String = "乙队",
+            status: String = "upcoming",
+        ) = MatchItem(
+            matchId = id,
+            home = home,
+            away = away,
+            league = league,
+            status = status,
+        )
+
+        val epl = match("epl", "英超")
+        val eplFinished = match("epl-finished", "英超", status = "finished")
+        val serieA = match("serie-a", "意甲")
+        val important = match("important", "西甲", home = "皇家马德里")
+        val csl = match("csl", "中超")
+        val faCup = match("fa-cup", "足协杯")
+        val europe = match("europe", "欧冠淘汰赛")
+        val national = match("national", "世界杯")
+        val all = listOf(epl, eplFinished, serieA, important, csl, faCup, europe, national)
+
+        assertEquals(listOf(epl), visibleLiveScheduleMatches(all, "英超"))
+        assertEquals(listOf(serieA), visibleLiveScheduleMatches(all, "意甲"))
+        assertEquals(listOf(important, national), visibleLiveScheduleMatches(all, "important"))
+        assertEquals(listOf(csl, faCup), visibleLiveScheduleMatches(all, "中超"))
+        assertEquals(listOf(europe), visibleLiveScheduleMatches(all, "euro"))
+        assertEquals(listOf(national), visibleLiveScheduleMatches(all, "national"))
+    }
+
+    @Test
     fun beijingClockPromotesUpcomingButNeverFinishesOrOverridesHeldStates() {
         val beijing = TimeZone.getTimeZone("Asia/Shanghai")
         val start = Calendar.getInstance(beijing).apply {

@@ -4,6 +4,9 @@ import com.qiubo.optimaltv.data.model.MatchItem
 import com.qiubo.optimaltv.ui.live.ImportantTeamPolicy
 import com.qiubo.optimaltv.ui.live.MatchStatusKind
 import com.qiubo.optimaltv.ui.live.TodayMatchPager
+import com.qiubo.optimaltv.ui.live.TvLiveLayout
+import com.qiubo.optimaltv.ui.live.cardLeagueLabel
+import com.qiubo.optimaltv.ui.live.heroTeamNameFontSize
 import com.qiubo.optimaltv.ui.live.matchStatusKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -20,6 +23,28 @@ class LiveFlashPolicyTest {
         assertEquals(listOf(5), five.first().rows[1].map { it.matchId.toInt() })
         assertEquals(listOf(4, 4), TodayMatchPager.pages((1..8).map(::match)).first().rows.map { it.size })
         assertEquals(2, TodayMatchPager.pages((1..9).map(::match)).size)
+    }
+
+    @Test fun tvGridFitsExactlyFourCardsAcrossTheCanvas() {
+        assertEquals(427f, TvLiveLayout.CardWidth)
+        assertEquals(
+            TvLiveLayout.CanvasWidth,
+            TvLiveLayout.HorizontalInset * 2 +
+                TvLiveLayout.CardWidth * TvLiveLayout.Columns +
+                TvLiveLayout.CardGap * (TvLiveLayout.Columns - 1),
+        )
+    }
+
+    @Test fun cardLeagueLabelKeepsRoundButAvoidsLongEllipsis() {
+        assertEquals("法甲\n第9轮", cardLeagueLabel("法甲联赛 第9轮"))
+        assertEquals("英超\n第9轮", cardLeagueLabel("英超第9轮"))
+        assertEquals("足球综合", cardLeagueLabel("足球综合"))
+    }
+
+    @Test fun heroTeamNamesShrinkBeforeTheyCanBeTruncated() {
+        assertEquals(68f, heroTeamNameFontSize("国际米兰", hasScore = true))
+        assertEquals(68f, heroTeamNameFontSize("AC米兰", hasScore = false))
+        assertTrue(heroTeamNameFontSize("托特纳姆热刺足球俱乐部青年队", hasScore = true) < 68f)
     }
 
     @Test fun importantMeansPopularTeamsNotWholeLeague() {

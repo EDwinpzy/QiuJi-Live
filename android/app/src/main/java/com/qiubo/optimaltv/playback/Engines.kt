@@ -133,19 +133,21 @@ class Media3Engine(context: Context) : MediaEngine {
     @Volatile private var liveWindowHintMs = 0L
     private var liveSegmentHintMs = 0L
 
-    /** 小窗口直播（球迹直播中继：3×2s＝6s）：必须换掉固定的 15s 目标延迟与 6s 恢复水位 */
-    private fun smallWindowLive(): Boolean = LiveWindowPolicy.isSmall(liveWindowHintMs)
-
     override fun setLiveWindowHintMs(windowMs: Long, segmentMs: Long) {
-        liveSegmentHintMs = segmentMs.coerceAtLeast(0L)
+        val oldWindowMs = liveWindowHintMs
+        val oldSegmentMs = liveSegmentHintMs
+        val newSegmentMs = segmentMs.coerceAtLeast(0L)
         val v = if (windowMs > 0) windowMs else 0L
-        if (v == liveWindowHintMs) return
-        val profileChanged = smallWindowLive() != LiveWindowPolicy.isSmall(v)
+        if (v == liveWindowHintMs && newSegmentMs == liveSegmentHintMs) return
+        val profileChanged =
+            LiveWindowPolicy.bufferDurations(oldWindowMs, oldSegmentMs) !=
+                LiveWindowPolicy.bufferDurations(v, newSegmentMs)
         com.qiubo.optimaltv.OtvLog.i(
             "engine 直播窗口提示 ${liveWindowHintMs}ms → ${v}ms" +
                 if (profileChanged) "（重建播放器换缓冲档）" else "",
         )
         liveWindowHintMs = v
+        liveSegmentHintMs = newSegmentMs
         // 缓冲档（LoadControl）只能在建播放器时给——档位变化时释放，下次 prepare 以新档重建
         if (profileChanged) releasePlayerForRebuild()
     }
@@ -405,9 +407,9 @@ class Media3Engine(context: Context) : MediaEngine {
         // v1.14（2026-09-01 卡顿根治）：max 90s→120s——直播续签改「旧地址死透才切」后，
         // 检测间隔 90s 必须被缓冲余量完整覆盖（120s > 90s 检测 + 30s 切换衔接安全垫）。
         // A 1.5s resume threshold fits the <=5s live-offset budget.
-        val (minBuf, maxBuf, startBuf, reBuf) = loadControlDurations()
+        val buffers = LiveWindowPolicy.bufferDurations(liveWindowHintMs, liveSegmentHintMs)
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(minBuf, maxBuf, startBuf, reBuf)
+            .setBufferDurationsMs(buffers.minMs, buffers.maxMs, buffers.playMs, buffers.rebufferMs)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
         val p = ExoPlayer.Builder(appCtx, renderersFactory)
@@ -514,27 +516,6 @@ class Media3Engine(context: Context) : MediaEngine {
     private fun liveOffsetUpperBoundMs(
         targetMs: Long = LiveWindowPolicy.targetOffsetMs(liveWindowHintMs, liveSegmentHintMs),
     ): Long = (targetMs + 750L).coerceAtMost(LiveWindowPolicy.MAX_OFFSET_MS)
-
-    /**
-     * A rolling HLS window cannot be kept at a stable low offset with the old 30s/120s
-     * load-control profile: the requested 30s reserve is larger than the entire 32.4s
-     * window and the loader never reaches its stop condition. Keep a reachable reserve
-     * of one target plus one segment, while allowing the loader to fill the live window.
-     */
-    private fun loadControlDurations(): List<Int> {
-        if (smallWindowLive()) {
-            return listOf(8_000, 16_000, 600, 1_500)
-        }
-        if (liveWindowHintMs in 13_000L..60_000L) {
-            val maxBuf = (liveWindowHintMs - 500L).coerceIn(8_000L, 60_000L).toInt()
-            val target = LiveWindowPolicy.targetOffsetMs(liveWindowHintMs, liveSegmentHintMs)
-            val segment = liveSegmentHintMs.takeIf { it > 0L } ?: 4_000L
-            val minBuf = (target + segment).coerceIn(6_000L, maxBuf.toLong()).toInt()
-            val startBuf = target.coerceIn(1_000L, 2_500L).toInt()
-            return listOf(minBuf, maxBuf, startBuf, 3_000)
-        }
-        return listOf(30_000, 120_000, 1_000, 2_500)
-    }
 
     override fun prepare(request: PrepareRequest) {
         val p = ensurePlayer()

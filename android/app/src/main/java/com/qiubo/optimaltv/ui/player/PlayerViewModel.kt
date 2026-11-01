@@ -23,8 +23,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
@@ -107,6 +111,28 @@ data class PlayerUiState(
     val engineEpoch: Int = 0,
     val fatalMsg: String? = null,
 )
+
+/** Fields that actually affect PlayerScreen composition; playback telemetry stays in [PlayerUiState]. */
+data class PlayerScreenUiState(
+    val lines: List<LiveSourceLine> = emptyList(),
+    val activeLine: Int = 0,
+    val sourceResolving: Boolean = false,
+    val playState: EnginePlayState = EnginePlayState.IDLE,
+    val srcPickerVisible: Boolean = false,
+    val engineEpoch: Int = 0,
+    val fatalMsg: String? = null,
+)
+
+internal fun PlayerUiState.screenProjection(): PlayerScreenUiState = PlayerScreenUiState(
+    lines = lines,
+    activeLine = activeLine,
+    sourceResolving = sourceResolving,
+    playState = playState,
+    srcPickerVisible = srcPickerVisible,
+    engineEpoch = engineEpoch,
+    fatalMsg = fatalMsg,
+)
+
 object PlayerStartupStatePolicy {
     fun initial(@Suppress("UNUSED_PARAMETER") matchId: String): PlayerUiState = PlayerUiState(
         title = "球迹直播",
@@ -138,6 +164,10 @@ class PlayerViewModel(
 
     private val _ui = MutableStateFlow(PlayerStartupStatePolicy.initial(matchId))
     val ui: StateFlow<PlayerUiState> = _ui.asStateFlow()
+    val screenUi: StateFlow<PlayerScreenUiState> = ui
+        .map { it.screenProjection() }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ui.value.screenProjection())
 
     lateinit var engine: MediaEngine
         private set
@@ -179,6 +209,7 @@ class PlayerViewModel(
     private var engineEpochCounter = 0
     private var engineStateJob: Job? = null
     private var firstFrameJob: Job? = null
+    private var firstFrameRecorded = false
     private var lastAutoSwitchAt = -1L
     private var sameLineRetries = 0
     private var softwareFallbackTried = false
@@ -313,6 +344,7 @@ private fun installEngine(newEngine: MediaEngine) {
                 val src = liveSrcs.getOrNull(idx) ?: continue
                 val s = _ui.value
                 if (s.fatalMsg != null) continue
+                if (awaitingPrepare || s.sourceResolving || stallRecoveryJob?.isActive == true) continue
                 if (s.playState != EnginePlayState.READY && s.playState != EnginePlayState.BUFFERING) continue
                 val playingUrl = livePlayingUrl
                 if (playingUrl.isNullOrBlank()) continue
@@ -339,6 +371,7 @@ private fun installEngine(newEngine: MediaEngine) {
                     continue
                 }
                 if (freshUrl == playingUrl) continue   // 签名未变化，无需动作
+                if (awaitingPrepare || _ui.value.sourceResolving || stallRecoveryJob?.isActive == true) continue
                 // HTTP 200 on an old manifest does not prove its signed segments remain usable.
                 // Prefer the new URL as soon as signing changes, before the old window expires.
                 if (!isCurrentPlaybackRequest(
@@ -411,6 +444,9 @@ private fun installEngine(newEngine: MediaEngine) {
                     }
                 }
             }
+            if (startedThisSession && !firstFrameRecorded && state.firstFrameRendered) {
+                onFirstFrameRendered(state.positionMs)
+            }
         }
     }
 }
@@ -454,6 +490,7 @@ private suspend fun startSession(
     val sessionEngineEpoch = engineEpochCounter
     awaitingPrepare = false
     startedThisSession = false
+    firstFrameRecorded = false
     stallRecoveries = 0
     triedLines += lineIdx
     _ui.value = _ui.value.copy(activeLine = lineIdx, fatalMsg = null, sourceResolving = !reuseResolvedUrl)
@@ -984,18 +1021,24 @@ private suspend fun onSessionStarted(posMs: Long) {
     startedThisSession = true
     awaitingPrepare = false
     watchdogJob?.cancel()
-    firstFrameJob?.cancel()
     liveAutoRetries = 0
     liveAutoRetryJob?.cancel()
     Log.i(TAG, "READY line=${_ui.value.activeLine} @$posMs ms")
-    OtvLog.i("READY line=${_ui.value.activeLine} @$posMs ms（出画面）")
+    OtvLog.i("READY line=${_ui.value.activeLine} @$posMs ms（等待首帧）")
+    armLiveAudioCodecCheck()
+}
+
+private fun onFirstFrameRendered(posMs: Long) {
+    if (firstFrameRecorded) return
+    firstFrameRecorded = true
+    firstFrameJob?.cancel()
+    OtvLog.i("首帧输出 line=${_ui.value.activeLine} @$posMs ms")
     runCatching {
         val started = _ui.value.lines.getOrNull(_ui.value.activeLine)
         telemetry.mark(PlaybackTelemetry.Stage.FIRST_FRAME, source = started?.url.orEmpty(), detail = "line=${_ui.value.activeLine}")
         OtvLog.i(telemetry.summary(started?.url.orEmpty()).format())
     }
-    runCatching { PlaybackHealthLog.start(healthSnapshot("起播")) }
-    armLiveAudioCodecCheck()
+    runCatching { PlaybackHealthLog.start(healthSnapshot("首帧")) }
 }
 
 private fun armLiveAudioCodecCheck() {

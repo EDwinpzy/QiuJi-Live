@@ -12,6 +12,7 @@ class LiveScheduleFetchTest {
     @Test
     fun matchesRequestsUseOneDirectPath() {
         assertEquals("/api/matches?fresh=1", LiveRepository.matchesRequestPath())
+        assertEquals("/api/matches", LiveRepository.matchesRequestPath(fresh = false))
     }
 
     @Test

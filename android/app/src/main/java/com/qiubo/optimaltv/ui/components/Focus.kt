@@ -35,6 +35,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import android.util.Log
+import com.qiubo.optimaltv.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -139,7 +141,7 @@ fun lazyNavContainer(state: LazyListState): NavScrollContainer = NavScrollContai
         val overshoot = last.offset + last.size - info.viewportEndOffset
         val maxStep = info.visibleItemsInfo.maxOf { it.size }.coerceAtLeast(1)
         val step = minOf(maxStep, if (overshoot > 0) overshoot + 1 else listPitch(info.visibleItemsInfo))
-        Log.d("OptimalTV", "stepForward last(idx=${last.index},off=${last.offset},sz=${last.size}) vpEnd=${info.viewportEndOffset} over=$overshoot step=$step")
+        debugNavLog { "stepForward last(idx=${last.index},off=${last.offset},sz=${last.size}) vpEnd=${info.viewportEndOffset} over=$overshoot step=$step" }
         if (step <= 0) false else { state.scrollBy(step.toFloat()); true }
     },
     stepBackward = {
@@ -238,6 +240,8 @@ fun Modifier.dpadFocusable(
     ringBackdropColor: Color = Color.Black.copy(alpha = 0.45f),
     /** 非空 = 聚焦时画背景胶囊（原版筛选 chip 焦点视觉），不画描边环 */
     focusedBg: Color? = null,
+    /** focusedBg 的混合模式；Difference 可在不重组文字的情况下实现白底反色文字 */
+    focusedBgBlendMode: BlendMode = BlendMode.SrcOver,
     /** focusedBg 胶囊圆角（默认 12dp；全圆角胶囊型按钮传高度一半） */
     focusedBgRadius: Dp = 12.dp,
     /** 聚焦态回调：白底胶囊时内容需切黑字（原版 sk-key/chip focused 白底黑字） */
@@ -259,13 +263,28 @@ fun Modifier.dpadFocusable(
     onClick: () -> Unit,
 ): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
-    var focused by remember { mutableStateOf(false) }
+    // 视觉态只供 draw 阶段读取；导航/布局热路径使用 AtomicBoolean，避免焦点变化
+    // 把布局回调和筛选文字卷进重组与 measureAndLayout。
+    val focusVisual = remember { mutableStateOf(false) }
+    val focused = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val scaleAnim = animateFloatAsState(
-        targetValue = if (focused) scaleFocused else 1f,
-        animationSpec = TvInteractionMotion.focusScaleSpec,
-        label = "focusScale",
-    )
+    // 大卡片/筛选 chip 在低端设备上使用静态焦点态：跳过动画状态与
+    // graphicsLayer 节点，焦点仅由背景/描边即时表达，减少每键一次重组。
+    val scaleAnim = if (scaleFocused == 1f) {
+        null
+    } else {
+        animateFloatAsState(
+            targetValue = if (focusVisual.value) scaleFocused else 1f,
+            animationSpec = TvInteractionMotion.focusScaleSpec,
+            label = "focusScale",
+        )
+    }
+    val scaleModifier = scaleAnim?.let { anim ->
+        Modifier.graphicsLayer {
+            scaleX = anim.value
+            scaleY = anim.value
+        }
+    } ?: Modifier
     val bandId = remember { OtvNav.newId() }
     val bandNode = remember(externalFocusRequester) {
         OtvNav.Node(externalFocusRequester ?: FocusRequester(), floating, navGroup)
@@ -333,14 +352,14 @@ fun Modifier.dpadFocusable(
             )
             // 滚动会持续位移当前焦点节点——同步刷新自愈锚点，保证漂移恢复坐标新鲜。
             // 当前焦点用未裁剪 fullBounds；候选资格仍由完整可见状态独立控制。
-            if (focused) OtvNav.updateAnchor(bandId, bandNode)
+            if (focused.get()) OtvNav.updateAnchor(bandId, bandNode)
         }
         .onFocusEvent {
-            if (it.isFocused != focused) {
+            if (it.isFocused != focused.getAndSet(it.isFocused)) {
                 // 带窗口坐标与 bandId，便于 logcat 定位焦点去向（boundsInWindow 为布局边界；
                 // 同节点重组销毁重建会换 bandId——1ms 内连续 GAINED 换 ID = 重组重建焦点）
-                Log.d(TAG, "focus ${if (it.isFocused) "GAINED" else "LOST"}#$bandId @${bandNode.bounds}")
-                focused = it.isFocused
+                debugNavLog { "focus ${if (it.isFocused) "GAINED" else "LOST"}#$bandId @${bandNode.bounds}" }
+                focusVisual.value = it.isFocused
                 val focusEpoch = if (it.isFocused) {
                     wasFocusedOnce.set(true)
                     OtvNav.onCardFocused(bandId)
@@ -353,7 +372,7 @@ fun Modifier.dpadFocusable(
                     if (!OtvNav.isFocusedNodeUsable(bandNode)) {
                         scope.launch {
                             delay(120)
-                            if (focused && OtvNav.isFocusCurrent(bandId, focusEpoch) &&
+                            if (focused.get() && OtvNav.isFocusCurrent(bandId, focusEpoch) &&
                                 !OtvNav.isFocusedNodeUsable(bandNode)
                             ) {
                                 Log.w(TAG, "focus on invalid node — stabilize to nearest")
@@ -370,7 +389,7 @@ fun Modifier.dpadFocusable(
                     // 移走后仍触发 onClick，会把页面和光标强行拉回。
                     scope.launch {
                         delay(autoSelectDelayMs)
-                        if (focused && OtvNav.isFocusCurrent(bandId, focusEpoch)) onClick()
+                        if (focused.get() && OtvNav.isFocusCurrent(bandId, focusEpoch)) onClick()
                     }
                 }
             }
@@ -380,15 +399,15 @@ fun Modifier.dpadFocusable(
         // a second target: DPAD_CENTER can move focus to it, leaving OtvNav's ring/state
         // on the outer node and making the page appear frozen after a non-navigation click.
         .clickable(enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick)
-        // Read each animation frame in the layer phase, avoiding recomposition and
-        // navigation registration on every tick across all TV screens.
-        .graphicsLayer {
-            scaleX = scaleAnim.value
-            scaleY = scaleAnim.value
-        }
+        // Static focus states have no animation layer at all; animated controls
+        // still read the value in the layer phase rather than during composition.
+        .then(scaleModifier)
         .drawWithContent {
             // focusedBg 是「背景」：必须画在内容下层，否则盖住文字
-            if (focused) {
+            val isFocused = focusVisual.value
+            val drawFocusedBgAfterContent =
+                isFocused && focusedBg != null && focusedBgBlendMode != BlendMode.SrcOver
+            if (isFocused && !drawFocusedBgAfterContent) {
                 focusedBg?.let {
                     drawRoundRect(
                         color = it,
@@ -399,7 +418,17 @@ fun Modifier.dpadFocusable(
                 }
             }
             drawContent()
-            if (focused && drawRing && !(focusedBg != null && focusedBg.luminance() > 0.5f)) {
+            if (drawFocusedBgAfterContent) {
+                // Difference 让白底下的白字立即变黑，无需在 Composable 中读取焦点态。
+                drawRoundRect(
+                    color = focusedBg!!,
+                    topLeft = Offset.Zero,
+                    size = Size(size.width, size.height),
+                    cornerRadius = CornerRadius(focusedBgRadius.toPx()),
+                    blendMode = focusedBgBlendMode,
+                )
+            }
+            if (isFocused && drawRing && !(focusedBg != null && focusedBg.luminance() > 0.5f)) {
                 // 焦点环沿控件外缘绘制：品牌色细环 + 极窄暗色衬底，
                 // 避免旧版向内叠粗黑边后形成厚重灰框。
                 val strokeW = ringWidth.toPx()
@@ -425,6 +454,10 @@ fun Modifier.dpadFocusable(
 
 private const val TAG = "OptimalTV"
 
+private inline fun debugNavLog(message: () -> String) {
+    if (BuildConfig.DEBUG && Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, message())
+}
+
 /**
  * TV 初始落焦：FocusRequester 的关联目标可能晚于首帧 attach，未就绪时
  * requestFocus 会失败，这里带重试直至落焦成功。
@@ -437,10 +470,10 @@ fun InitialFocusEffect(focusRequester: FocusRequester, tag: String, enabled: Boo
         repeat(60) { attempt ->
             try {
                 focusRequester.requestFocus()
-                Log.d(TAG, "$tag: initial focus OK (attempt $attempt)")
+                debugNavLog { "$tag: initial focus OK (attempt $attempt)" }
                 return@LaunchedEffect
             } catch (e: IllegalStateException) {
-                if (attempt == 0) Log.d(TAG, "$tag: focus not ready, retry: ${e.message}")
+                if (attempt == 0) debugNavLog { "$tag: focus not ready, retry: ${e.message}" }
             }
             delay(50)
         }
@@ -754,7 +787,7 @@ object OtvNav {
             topFocus?.let { fr -> runCatching { fr.requestFocus() } }
         } else if (repeatCount == 0) {
             val c = if (navDx(dir) != 0) cur.horzScroll else cur.vertScroll
-            Log.d(TAG, "OtvNav: blocked dir=$dir cur=${cur.bounds} group=${cur.group} canStep=${c?.let { canStep(it, dir) }}")
+            debugNavLog { "OtvNav: blocked dir=$dir cur=${cur.bounds} group=${cur.group} canStep=${c?.let { canStep(it, dir) }}" }
         }
         lastMoveAt = android.os.SystemClock.uptimeMillis()
         return true
@@ -774,7 +807,7 @@ object OtvNav {
                     if (!isRevealCurrent(token, sourceId, expectedEpoch)) return@launch
                     val stepStamp = android.os.SystemClock.uptimeMillis()
                     val stepped = if (dir == NAV_DOWN || dir == NAV_RIGHT) cont.stepForward() else cont.stepBackward()
-                    Log.d(TAG, "scroll-reveal#${it + 1} dir=$dir stepped=$stepped stepStamp=$stepStamp")
+                    debugNavLog { "scroll-reveal#${it + 1} dir=$dir stepped=$stepped stepStamp=$stepStamp" }
                     if (!stepped) return@launch
                     // 预留约两帧让滚入视口的节点完成 measure/layout；较旧 50ms 等待
                     // 缩短 36%，同时保留异步窗口，允许页面/浮层的新焦点事务接管。
@@ -787,10 +820,10 @@ object OtvNav {
                     // 2026-09-19：起点同样走锚点（防幽灵上报回写，见 dispatch 注释）
                     val retryOrigin = lastAnchorByGroup[fresh.group ?: cur.group ?: ""]?.bounds ?: fresh.bounds
                     val t = searchGeom(retryOrigin, dir, fresh.group ?: cur.group, exclude = fresh)
-                    Log.d(TAG, "scroll-reveal#${it + 1} fresh=${fresh.bounds} hit=${t?.bounds} stamp=${t?.stamp} ok=${t != null && t.stamp >= stepStamp}")
+                    debugNavLog { "scroll-reveal#${it + 1} fresh=${fresh.bounds} hit=${t?.bounds} stamp=${t?.stamp} ok=${t != null && t.stamp >= stepStamp}" }
                     if (t != null && t.stamp >= stepStamp && focusNode(t)) return@launch
                 }
-                Log.d(TAG, "OtvNav: scroll-reveal exhausted dir=$dir")
+                debugNavLog { "OtvNav: scroll-reveal exhausted dir=$dir" }
             } finally {
                 if (pendingRevealToken == token) pendingRevealToken = 0L
             }
@@ -919,7 +952,7 @@ fun Modifier.navSink(
         }
         .onFocusEvent {
             if (it.isFocused) {
-                Log.d(TAG, "focus GAINED(sink) @${node.bounds}")
+                debugNavLog { "focus GAINED(sink) @${node.bounds}" }
                 OtvNav.onCardFocused(sinkId)
             }
         }

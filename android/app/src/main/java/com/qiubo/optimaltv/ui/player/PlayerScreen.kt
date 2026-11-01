@@ -130,7 +130,7 @@ fun PlayerScreen(nav: NavController, matchIdArg: String) {
         key = "football-player:$matchId",
         factory = playerViewModelFactory(matchId),
     )
-    val ui by vm.ui.collectAsStateWithLifecycle()
+    val ui by vm.screenUi.collectAsStateWithLifecycle()
     val activity = LocalContext.current as Activity
     DisposableEffect(Unit) {
         activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -241,7 +241,7 @@ private fun playerViewModelFactory(matchId: String) =
     }
 @Composable
 private fun LiveSourcePicker(
-    ui: PlayerUiState,
+    ui: PlayerScreenUiState,
     vm: PlayerViewModel,
     modifier: Modifier,
     onTick: () -> Unit,

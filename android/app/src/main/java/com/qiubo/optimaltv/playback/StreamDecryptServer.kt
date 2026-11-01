@@ -67,7 +67,6 @@ object StreamDecryptServer {
         synchronized(this) {
             if (started) return
             started = true
-            val appCtx = context.applicationContext
             // v1.8（2026-08-30）加固：accept 循环外层自愈——实测桥线程会因 socket 异常
             // 静默退出且无任何重启方（直播全部假死 70s/请求）；现在捕获后 1s 重听。
             // 连接处理挪到 4 线程池：单个慢连接（如读了半截头就断）不再卡死整个桥。
@@ -102,16 +101,6 @@ object StreamDecryptServer {
                     }
                 }
             }.apply { isDaemon = true; name = "otv-decrypt" }.start()
-            // 主线程预建首个无头 WebView（首次解密免等待）——v1.10 延迟 1.2s：
-            // WebView 初始化上百毫秒，冷启动首帧不与它抢主线程；用户进直播页前通常已就绪。
-            // v1.19 死锁修复：旧版在主线程调带 latch.await 的 ensureWebView——
-            // await 等的是排在本线程队列后面的 post 任务，永远等不到 → 每次冷启动
-            // 主线程白卡 5 秒（正落在启动门闸期间，转圈冻结的直接根因）。
-            // 预建本就在主线程执行，直接创建即可，无需跨线程同步。
-            mainHandler.postDelayed({
-                runCatching { createWebViewLocked(appCtx, 0) }
-            }, 1_200)
-
         }
     }
 
@@ -271,7 +260,7 @@ object StreamDecryptServer {
             val slot = freeSlot()
             if (slot < 0) return null
             try {
-                return decrypt(ctx, ensureWebView(ctx, slot), html, matchId, slot)
+                return decrypt(ensureWebView(ctx, slot), html, matchId, slot)
             } finally {
                 freeSlot(slot)
             }
@@ -303,7 +292,7 @@ object StreamDecryptServer {
      *  ⑬（2026-09-08）：零回调检测——12s 内 evaluateJavascript 一次回调都没有
      *  （正常未开播页也会秒回空串）说明该 WebView 已僵死（渲染进程死亡但回调未触发的
      *  形态，如 GPU 进程崩溃），返回 null 的同时请求主线程重建该槽，不留给下次再超时。 */
-    private fun decrypt(context: Context, wv: WebView, html: String, matchId: String, slot: Int): String? {
+    private fun decrypt(wv: WebView, html: String, matchId: String, slot: Int): String? {
         val latch = CountDownLatch(1)
         val result = AtomicReference<String?>(null)
         val callbacks = java.util.concurrent.atomic.AtomicInteger(0)

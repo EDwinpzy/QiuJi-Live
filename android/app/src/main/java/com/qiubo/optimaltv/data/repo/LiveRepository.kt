@@ -32,7 +32,8 @@ class LiveRepository(
         fun relayUrl(base: String, raw: String, referer: String = "https://www.88zhibo.tv/"): String =
             "$base/api/relay?u=" + URLEncoder.encode(raw, "UTF-8") + "&ref=" + URLEncoder.encode(referer, "UTF-8")
 
-        internal fun matchesRequestPath(): String = "/api/matches?fresh=1"
+        internal fun matchesRequestPath(fresh: Boolean = true): String =
+            if (fresh) "/api/matches?fresh=1" else "/api/matches"
 
         internal fun matchesArray(response: JSONObject): org.json.JSONArray {
             val error = if (response.isNull("error")) "" else response.optString("error").trim()
@@ -42,6 +43,14 @@ class LiveRepository(
         }
 
         private const val TAG = "OTV"
+        private val TEAM_SPACE_RE = Regex("\\s+")
+        private val TEAM_COMPETITION_PREFIX_RE = Regex(
+            "^(英超|西甲|意甲|德甲|法甲|中超|欧冠|欧联|欧协|欧国联|世预赛|亚冠|足协杯|英联杯|足总杯|德乙|英冠|荷甲|葡超|比甲|苏超|日职|韩K|沙特联|巴甲|阿甲|美职足)[\\s\\S]*?第?[\\d一二三四五六七八九十]+[轮轮次回合]",
+        )
+        private val TEAM_SHORT_PREFIX_RE = Regex(
+            "^(英超|西甲|意甲|德甲|法甲|中超|欧冠|欧联|欧协|欧国联|世预赛|亚冠)[\\s\\S]{0,6}?(?=[^\\x00-\\x7F])",
+        )
+        private val TEAM_BASE_SUFFIX_RE = Regex("(女篮|男篮|女足|男足|B队|二队|U\\d+|青年队)$")
 
         /** 足球 hero 海报池大小（2026-08-29 换新海报：tools/build_backend_zip.py 写入 fb-01..36.jpg） */
         const val POSTER_POOL = 36
@@ -128,8 +137,8 @@ class LiveRepository(
         }
     }
 
-    private suspend fun getMatches(base: String): org.json.JSONArray = withContext(Dispatchers.IO) {
-        val path = matchesRequestPath()
+    private suspend fun getMatches(base: String, fresh: Boolean): org.json.JSONArray = withContext(Dispatchers.IO) {
+        val path = matchesRequestPath(fresh)
         val req = Request.Builder()
             .url(base.trimEnd('/') + path)
             .header("User-Agent", "Mozilla/5.0 (Linux; Android 11) QiuJiLive/1.0")
@@ -148,11 +157,24 @@ class LiveRepository(
      *  后台收集 DataStore flow：首发射加载 + 设置页变更即时刷新，语义与旧版一致。 */
     @Volatile private var cachedBase: String = "http://127.0.0.1:8090"
 
+    /** 队标（原版 iconUrl 1:1：normTeamName 归一化 → 本地 574 队映射零请求，未命中回落后端接口） */
+    private val teamIcons: Map<String, String> by lazy {
+        runCatching {
+            val json = appContext.assets.open("team_icons.json").bufferedReader().use { it.readText() }
+            val o = JSONObject(json)
+            buildMap { o.keys().forEach { k -> put(k, o.getString(k)) } }
+        }.getOrDefault(emptyMap())
+    }
+
     init {
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             runCatching {
                 settings.settings.collect { cachedBase = it.liveApiBaseUrl.trim().trimEnd('/') }
             }
+        }
+        // 首次首页组合不再同步读 assets；映射在 IO 上预热，未完成时仍有首字兜底。
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            teamIcons
         }
     }
 
@@ -225,12 +247,12 @@ class LiveRepository(
         return today to fmt.format(cal.time)
     }
 
-    /** 比赛列表（前台轮询使用 fresh=1；服务端过期缓存会先完成单飞刷新） */
-    suspend fun matches(force: Boolean = false): List<MatchItem> = withContext(Dispatchers.IO) {
+    /** 比赛列表：fresh=true 等待服务端刷新；静默轮询用 fresh=false 立即取 SWR 缓存。 */
+    suspend fun matches(force: Boolean = false, fresh: Boolean = true): List<MatchItem> = withContext(Dispatchers.IO) {
         matchesCache?.takeIf { !force && System.currentTimeMillis() - it.first < 30_000 }?.second?.let { return@withContext it }
         val base = baseUrl()
         waitBackendReady(base)
-        val arr = getMatches(base)
+        val arr = getMatches(base, fresh)
         val (today, tomorrow) = todayTomorrowKeys()
         // optString 对 JSON null 会返回字面量 "null"（需求 足球#1「null'」根因之一）——统一消毒
         fun os(o: org.json.JSONObject, k: String): String =
@@ -448,40 +470,36 @@ class LiveRepository(
         }.getOrDefault(true)
     }
 
-    /** 队标（原版 iconUrl 1:1：normTeamName 归一化 → 本地 574 队映射零请求，未命中回落后端接口） */
-    private val teamIcons: Map<String, String> by lazy {
-        runCatching {
-            val json = appContext.assets.open("team_icons.json").bufferedReader().use { it.readText() }
-            val o = JSONObject(json)
-            buildMap { o.keys().forEach { k -> put(k, o.getString(k)) } }
-        }.getOrDefault(emptyMap())
-    }
+    private val teamIconUrlCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** normTeamName（原版：剥赛事/轮次前缀 + 空白归一） */
     fun normTeamName(name: String): String {
-        var n = name.trim().replace(Regex("\\s+"), "")
+        var n = name.trim().replace(TEAM_SPACE_RE, "")
         // 赛事+轮次前缀（如「英超第18轮南安普顿」「欧冠1/4决赛阿森纳」）
-        n = n.replace(Regex("^(英超|西甲|意甲|德甲|法甲|中超|欧冠|欧联|欧协|欧国联|世预赛|亚冠|足协杯|英联杯|足总杯|德乙|英冠|荷甲|葡超|比甲|苏超|日职|韩K|沙特联|巴甲|阿甲|美职足)[\\s\\S]*?第?[\\d一二三四五六七八九十]+[轮轮次回合]"), "")
-        n = n.replace(Regex("^(英超|西甲|意甲|德甲|法甲|中超|欧冠|欧联|欧协|欧国联|世预赛|亚冠)[\\s\\S]{0,6}?(?=[^\\x00-\\x7F])"), "")
+        n = n.replace(TEAM_COMPETITION_PREFIX_RE, "")
+        n = n.replace(TEAM_SHORT_PREFIX_RE, "")
         return n
     }
 
     fun teamIconUrl(team: String): String {
         val base = baseUrl()
+        val cacheKey = base + "\u0000" + team
+        teamIconUrlCache[cacheKey]?.let { return it }
         val norm = normTeamName(team)
         // 2026-08-28：本地映射表全部改为绝对 URL（api-sports/TDB CDN，国内可达），
         // 旧版相对路径 assets/teams/*.png 在内置后端 zip 里不存在 → 全量 404 → 队标大面积缺失
         val local = teamIcons[team] ?: teamIcons[norm] ?: teamIcons[baseTeamName(norm)]
-        if (local != null) {
-            return if (local.startsWith("http")) local
+        val url = if (local != null) {
+            if (local.startsWith("http")) local
             else "$base/${local.removePrefix("./")}"
-        }
-        return "$base/api/team-icon-img?name=" + URLEncoder.encode(team, "UTF-8")
+        } else "$base/api/team-icon-img?name=" + URLEncoder.encode(team, "UTF-8")
+        teamIconUrlCache[cacheKey] = url
+        return url
     }
 
     /** 别名兜底：去常见后缀再查一次 */
     private fun baseTeamName(n: String): String =
-        n.replace(Regex("(女篮|男篮|女足|男足|B队|二队|U\\d+|青年队)$"), "")
+        n.replace(TEAM_BASE_SUFFIX_RE, "")
 
     /** 足球海报池（2026-08-29 换新海报 36 张 jpg，经后端静态托管） */
     fun posterUrl(index: Int): String =

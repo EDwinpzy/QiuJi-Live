@@ -103,12 +103,8 @@ class MainActivity : ComponentActivity() {
             QiuJiLiveTheme {
                 // 足球赛程页面就绪前渲染品牌启动屏。
                 val ready by AppStartup.ready.collectAsStateWithLifecycle()
-                // 热更新在后台静默处理；无论服务端 force 标记如何，都不阻断使用。
-                val huSettled by com.qiubo.optimaltv.hotupdate.HotUpdateManager.settled.collectAsStateWithLifecycle()
-                when {
-                    !com.qiubo.optimaltv.BuildConfig.HOTUPDATE_ENABLED || huSettled -> if (ready) AppRoot() else StartupSplash()
-                    else -> StartupSplash()
-                }
+                // 热更新检查继续后台执行，但不能把首帧挡在启动屏。
+                if (ready) AppRoot() else StartupSplash()
             }
         }
     }
@@ -178,6 +174,7 @@ private fun AppRoot() {
 
     // 调试直达播放页：debug 广播 → pending 消费（详见 DebugNavBus；release 无写入方）
     LaunchedEffect(Unit) {
+        if (!com.qiubo.optimaltv.BuildConfig.DEBUG) return@LaunchedEffect
         while (true) {
             DebugNavBus.pendingMatchId?.let { id ->
                 DebugNavBus.pendingMatchId = null
