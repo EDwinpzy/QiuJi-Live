@@ -33,8 +33,8 @@ def test_build_manifest_matches_android_client_shape():
         force_update=True,
         title="发现新版本",
         changelog="修复播放\n优化启动",
-        file_name="MyTV-TV版.apk",
-        apk_url="https://example.test/apk-update/tv/v35/MyTV-TV.apk",
+        file_name="QiuJi-Live-TV版.apk",
+        apk_url="https://example.test/apk-update/tv/v35/QiuJi-Live-TV.apk",
         size_bytes=123,
         sha256="a" * 64,
         certificate_sha256="AA:" + "BB" * 31,
@@ -64,14 +64,14 @@ def test_manifest_rejects_non_https_and_invalid_floor():
         build_manifest(
             channel="tv", version_code=35, version_name="1.33",
             min_supported_version_code=34, force_update=False, title="",
-            changelog=[], file_name="MyTV.apk", apk_url="http://example.test/a.apk",
+            changelog=[], file_name="QiuJi-Live.apk", apk_url="http://example.test/a.apk",
             size_bytes=1, sha256="b" * 64,
         )
     with pytest.raises(ValueError, match="最低支持版本"):
         build_manifest(
             channel="tv", version_code=35, version_name="1.33",
             min_supported_version_code=36, force_update=False, title="",
-            changelog=[], file_name="MyTV.apk", apk_url="https://example.test/a.apk",
+            changelog=[], file_name="QiuJi-Live.apk", apk_url="https://example.test/a.apk",
             size_bytes=1, sha256="b" * 64,
         )
 
@@ -81,7 +81,7 @@ def test_mobile_channel_is_rejected_after_tv_only_cutover():
         build_manifest(
             channel="mobile", version_code=35, version_name="1.33",
             min_supported_version_code=0, force_update=False, title="",
-            changelog=[], file_name="MyTV.apk", apk_url="https://example.test/a.apk",
+            changelog=[], file_name="QiuJi-Live.apk", apk_url="https://example.test/a.apk",
             size_bytes=1, sha256="b" * 64,
         )
 
@@ -120,7 +120,7 @@ def test_manifest_with_parts_uses_sharded_schema():
     manifest = build_manifest(
         channel="tv", version_code=36, version_name="1.34",
         min_supported_version_code=0, force_update=False, title="发现新版本",
-        changelog=[], file_name="MyTV-TV版.apk",
+        changelog=[], file_name="QiuJi-Live-TV版.apk",
         apk_url="", size_bytes=100,
         sha256="a" * 64, certificate_sha256="aa" * 32,
         parts=[part("https://bucket.test/parts/part-01-of-02", 60),
@@ -138,7 +138,7 @@ def test_single_object_manifest_keeps_schema_one_and_empty_parts():
     manifest = build_manifest(
         channel="tv", version_code=35, version_name="1.33",
         min_supported_version_code=0, force_update=False, title="",
-        changelog=[], file_name="MyTV.apk",
+        changelog=[], file_name="QiuJi-Live.apk",
         apk_url="https://example.test/a.apk", size_bytes=10, sha256="b" * 64,
     )
     assert manifest["schema"] == 1
@@ -149,7 +149,7 @@ def test_manifest_rejects_inconsistent_or_insecure_parts():
     base = dict(
         channel="tv", version_code=36, version_name="1.34",
         min_supported_version_code=0, force_update=False, title="",
-        changelog=[], file_name="MyTV-TV版.apk",
+        changelog=[], file_name="QiuJi-Live-TV版.apk",
         size_bytes=100, sha256="a" * 64,
     )
     with pytest.raises(ValueError, match="分片总大小"):

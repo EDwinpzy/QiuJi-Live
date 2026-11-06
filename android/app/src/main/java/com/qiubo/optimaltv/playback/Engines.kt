@@ -399,7 +399,7 @@ class Media3Engine(context: Context) : MediaEngine {
             .setConnectTimeoutMs(10_000)
             // 直播源站或中继链路较慢时，读超时过短会触发中途断流重试。
             .setReadTimeoutMs(30_000)
-            .setUserAgent("Mozilla/5.0 (Linux; Android 11) QiuJiLive/1.0")
+            .setUserAgent("Mozilla/5.0 (Linux; Android 11) QiuJi-Live/1.0")
         val dataSourceFactory = DefaultDataSource.Factory(appCtx, httpFactory)
         // 直播缓冲参数按低配设备与慢源调整，降低网络抖动造成的反复缓冲；
         // v1.10（2026-08-31 低端机起播提速）：起播水位 2.5s→1s、二次缓冲 5s→2s——

@@ -138,7 +138,7 @@ class ApkUpdatePolicyTest {
         versionCode: Long,
         minSupportedVersionCode: Long,
         forceUpdate: Boolean = false,
-        url: String = "https://download.example/QiuJiLive.apk",
+        url: String = "https://download.example/QiuJi-Live.apk",
         sizeBytes: Long = 1,
         parts: List<ApkPart> = emptyList(),
     ) = ApkUpdateManifest(
@@ -152,7 +152,7 @@ class ApkUpdatePolicyTest {
         title = "发现新版本",
         changelog = listOf("修复问题"),
         apk = ApkArtifact(
-            fileName = "QiuJiLive.apk",
+            fileName = "QiuJi-Live.apk",
             url = url,
             sizeBytes = sizeBytes,
             sha256 = "a".repeat(64),

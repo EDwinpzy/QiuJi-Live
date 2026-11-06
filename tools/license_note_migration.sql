@@ -1,4 +1,4 @@
--- My TV 卡密备注编辑（幂等迁移）
+-- QiuJi-Live 卡密备注编辑（幂等迁移）
 -- 备注沿用 licenses.note；后台通过受保护 RPC 更新，并在激活流水留下审计记录。
 
 ALTER TABLE public.licenses

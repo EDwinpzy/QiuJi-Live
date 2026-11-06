@@ -1,4 +1,4 @@
-# AGENTS.md — 球迹直播仓库约定
+# AGENTS.md — QiuJi-Live 仓库约定
 
 ## 并行委派
 
@@ -13,7 +13,7 @@
 只有用户在当前请求中明确要求走发布流程时，才按以下发布步骤执行。
 
 > **仅在用户明确要求发布时检查并执行**：发布对共享工作区有影响；执行前用 `codex_app` 的 `list_threads` 看本仓库
-> （`D:\MyProjects\球迹直播`）还有没有其它 `status=active` 的对话：
+> （`D:\MyProjects\QiuJi-Live`）还有没有其它 `status=active` 的对话：
 > - **没有** → 按下面 1~6 步执行用户要求的流水线；
 > - **还有** → 不构建 APK、不发布、不提交、不推送，先报告并等用户安排。
 >
@@ -25,8 +25,8 @@
    Kotlin 侧运行 `testDebugUnitTest`，并以 `assembleRelease` 编译通过兜底。
 2. 如后端源码有改动，先运行 `python tools/build_backend_zip.py` 重建 TV 内嵌后端。
 3. 构建 APK：在 `android` 运行一次 `.\gradlew.bat assembleRelease`
-   （自动归档到 `apk/TV版/QiuJiLive-TV.apk`）。
-4. 核对版本、签名、内嵌后端和 APK 内容：保持 `com.qiubo.optimaltv.public` 与既有证书；
+   （自动归档到 `apk/TV版/QiuJi-Live-TV.apk`）。
+4. 核对版本、签名、内嵌后端和 APK 内容：保持 `com.qiubo.optimaltv.public`、namespace、包名与既有签名 keystore/alias 不变；
    确认 `HOTUPDATE_ENABLED=false`、`APK_UPDATE_ENABLED=false`、没有云端更新地址、
    安装权限或私有 CA；在投影仪覆盖安装并完成首页、遥控和真实直播验证。
 5. 更新文档：把本次变更摘要与实测证据写进 `docs/项目文档.md` 对应章节

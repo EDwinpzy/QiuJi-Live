@@ -24,7 +24,7 @@ class ReleaseSigningConfigTests(unittest.TestCase):
         tv = (ROOT / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
         self.assertTrue('rootProject.file("../apk/TV版")' in tv,
                         "TV release output must stay inside the active checkout")
-        self.assertNotIn("D:/MyProjects/My TV", tv,
+        self.assertNotIn("D:/MyProjects/QiuJi-Live", tv,
                          "release builds must not write into the main worktree")
 
     def test_gradle_build_directories_follow_the_active_worktree(self):

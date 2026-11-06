@@ -1,4 +1,4 @@
--- My TV card authorization protocol v2.
+-- QiuJi-Live card authorization protocol v2.
 -- Idempotent schema/RPC migration. Deliberately contains no inventory deletion.
 
 alter table public.licenses add column if not exists activated_at timestamptz;

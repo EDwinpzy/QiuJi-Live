@@ -1,9 +1,11 @@
-# 球迹直播 · QiuJi Live
+# QiuJi-Live（中文名称：球迹直播）
 
 > 面向 Android TV 与投影仪的足球直播客户端，内置 Python 本机后端，支持 HLS 直播播放、线路切换、播放恢复和 GitHub Release 手动分发。
 
-**品牌：** 球迹直播（英文：QiuJi Live）
-**工程仓库：** `football-live`
+**品牌：** QiuJi-Live（中文名称：球迹直播）
+**工程仓库：** `QiuJi-Live`
+**本地目录：** `D:\MyProjects\QiuJi-Live`
+**GitHub：** [EDwinpzy/QiuJi-Live](https://github.com/EDwinpzy/QiuJi-Live)
 **客户端：** Android TV / 投影仪
 
 [简体中文](#zh-cn) | [English](#en)
@@ -25,9 +27,9 @@
 
 ### 项目简介
 
-**球迹直播**（英文品牌 **QiuJi Live**）是一个只交付 Android TV / 投影仪客户端的足球直播应用。用户可以查看足球赛程和比赛状态，选择单场比赛的直播信号源，并在播放器中观看 HLS 直播。
+**QiuJi-Live**（中文名称：**球迹直播**）是一个只交付 Android TV / 投影仪客户端的足球直播应用。用户可以查看足球赛程和比赛状态，选择单场比赛的直播信号源，并在播放器中观看 HLS 直播。
 
-产品显示名已经统一为“球迹直播”。工程仓库名仍为 **`football-live`**；在 APK 文件名等不适合空格的场景中统一使用 **`QiuJiLive`**。
+产品显示名保留为“球迹直播”。工程仓库、Gradle 根项目名与本地目录已统一为 **`QiuJi-Live`**；发布 APK 文件名统一为 **`QiuJi-Live-TV.apk`**。applicationId、namespace、包名及签名 keystore/alias 保持不变。
 
 ### 功能
 
@@ -165,7 +167,7 @@ Pop-Location
 
 1. 检查共享工作区和其他活动任务，确认未混入他人未提交改动。
 2. 如后端源码有改动，运行 `python tools/build_backend_zip.py`，再运行后端、工具和 TV 测试。
-3. 构建 `assembleRelease`，保持 `com.qiubo.optimaltv.public` 和既有签名证书不变。
+3. 构建 `assembleRelease`，保持 `com.qiubo.optimaltv.public`、namespace、包名及既有签名 keystore/alias 不变。
 4. 核对 APK 版本单调递增、内嵌后端与源码一致，并确认没有云端更新端点、安装权限和私有 CA。
 5. 在投影仪覆盖安装，验证首页、遥控焦点和真实直播；记录截图、日志、版本和 SHA-256。
 6. 提交并推送，创建仅包含完整 TV APK 的 GitHub Release，重新下载后核对 SHA-256。
@@ -210,9 +212,9 @@ Pop-Location
 
 ### Overview
 
-**QiuJi Live** (Chinese brand: **球迹直播**) is a football live-streaming application delivered only for Android TV and projectors. Users can browse football fixtures and match status, choose an available live source for a match, and watch HLS streams in the player. Releases are distributed manually as complete APKs through GitHub Releases.
+**QiuJi-Live** (Chinese name: **球迹直播**) is a football live-streaming application delivered only for Android TV and projectors. Users can browse football fixtures and match status, choose an available live source for a match, and watch HLS streams in the player. Releases are distributed manually as complete APKs through GitHub Releases.
 
-The product display name is unified as “球迹直播”. The engineering repository remains **`football-live`**. **`QiuJiLive`** is used where spaces are unsuitable, such as APK filenames.
+The Chinese product display name remains “球迹直播”. The engineering repository, Gradle root project name, and local directory are now unified as **`QiuJi-Live`**; release APK filenames use **`QiuJi-Live-TV.apk`**. The applicationId, namespace, package name, and signing keystore/alias remain unchanged.
 
 ### Features
 
@@ -350,12 +352,12 @@ When authorized, execute the following serially:
 
 1. Check the shared worktree and other active tasks; do not include unrelated uncommitted changes.
 2. Rebuild `python-backend.zip` if backend source changed, then run backend, tooling, and TV tests.
-3. Run `assembleRelease`, keeping `com.qiubo.optimaltv.public` and the existing signing certificate.
+3. Run `assembleRelease`, keeping `com.qiubo.optimaltv.public`, the namespace, package name, and the existing signing keystore/alias unchanged.
 4. Verify a monotonically increasing `versionCode`, a matching embedded backend, and the absence of cloud update endpoints, install permission, and private CA.
 5. Install over the previous projector build and verify the home screen, D-pad navigation, and a real live stream; archive screenshots, logs, version, and SHA-256.
 6. Commit, push, and create a GitHub Release containing only the complete TV APK; download it again and verify its SHA-256.
 
-The current release model does not deploy a QiuJi Live server and does not build hot-update archives or APK segment manifests.
+The current release model does not deploy a QiuJi-Live server and does not build hot-update archives or APK segment manifests.
 
 See [docs/项目文档.md](docs/项目文档.md) and [AGENTS.md](AGENTS.md) for detailed release gates, shared-worktree rules, and rollback checks. Do not start a production release or allocate a version independently.
 

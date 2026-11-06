@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate football-live release acceptance evidence.
+"""Evaluate QiuJi-Live release acceptance evidence.
 
 The evaluator deliberately treats missing, weak, or ambiguous evidence as a
 failure. It never upgrades a short run, a single match, process liveness, or a
@@ -1109,7 +1109,7 @@ def mutate_and_expect_failure(base: Path, temp_root: Path, name: str, mutate: An
 
 
 def self_test() -> int:
-    with tempfile.TemporaryDirectory(prefix="football-live-acceptance-") as temp:
+    with tempfile.TemporaryDirectory(prefix="QiuJi-Live-acceptance-") as temp:
         temp_root = Path(temp)
         base = temp_root / "base"
         base.mkdir()

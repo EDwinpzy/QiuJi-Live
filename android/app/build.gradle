@@ -46,7 +46,7 @@ android {
         // v1.19 版本重规划：内测/公测双 flavor 退役——只保留一条正式分发线（原公测版）。
         // 热更新用于内嵌后端的启动维护。
         // v1.18 热更新：云端下发内嵌后端 zip，启动时静默检查+预下载，下次冷启动生效
-        // TV 客户端显示「球迹直播」，归档文件名为 QiuJiLive-TV.apk。
+        // TV 客户端显示「球迹直播」，归档文件名为 QiuJi-Live-TV.apk。
         resValue 'string', 'app_name', '球迹直播'
         // 足球比赛列表可直接访问，不设置内容准入门禁。
         buildConfigField 'String', 'API_BASE_URL', apiBaseUrlConstant
@@ -122,13 +122,13 @@ chaquopy {
     }
 }
 
-// 统一产物到项目目录：apk/TV版/ 固定名 QiuJiLive-TV.apk，
+// 统一产物到项目目录：apk/TV版/ 固定名 QiuJi-Live-TV.apk，
 // 由 assembleRelease 复制（对外分发=签名+热更新正式链路）。
 // debug 测试包不进 apk/——直接用项目根 build 构建输出目录。
 tasks.register("copyTvApk", Copy) {
     from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
     into(rootProject.file("../apk/TV版"))
-    rename { "QiuJiLive-TV.apk" }
+    rename { "QiuJi-Live-TV.apk" }
 }
 // AGP 的 assemble 任务在 android 插件注册后才出现，须在 afterEvaluate 挂接依赖
 afterEvaluate {

@@ -129,7 +129,7 @@ class LiveRepository(
     private suspend fun getLiveSource(base: String, path: String): JSONObject = withContext(Dispatchers.IO) {
         val req = Request.Builder()
             .url(base.trimEnd('/') + path)
-            .header("User-Agent", "Mozilla/5.0 (Linux; Android 11) QiuJiLive/1.0")
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android 11) QiuJi-Live/1.0")
             .build()
         liveHttpResponse(liveSourceHttp, req).use { resp ->
             require(resp.isSuccessful) { "HTTP ${resp.code} $path" }
@@ -141,7 +141,7 @@ class LiveRepository(
         val path = matchesRequestPath(fresh)
         val req = Request.Builder()
             .url(base.trimEnd('/') + path)
-            .header("User-Agent", "Mozilla/5.0 (Linux; Android 11) QiuJiLive/1.0")
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android 11) QiuJi-Live/1.0")
             .build()
         liveHttpResponse(matchesHttp, req).use { resp ->
             require(resp.isSuccessful) { "HTTP ${resp.code} $path" }

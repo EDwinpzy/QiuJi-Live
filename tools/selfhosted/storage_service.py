@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Private file API for the QiuJiLive update object store."""
+"""Private file API for the QiuJi-Live update object store."""
 
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ def make_server(
         raise ValueError("invalid storage service authorization configuration")
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "QiuJiLiveStorage/1.0"
+        server_version = "QiuJi-LiveStorage/1.0"
 
         def _send_json(self, status: int, payload: dict[str, object]) -> None:
             body = json.dumps(payload, separators=(",", ":")).encode("utf-8")

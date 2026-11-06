@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """从“球迹直播”品牌源图生成 Android TV 资源。
 
-源图固定为 tools/assets/qiuji-live-app-icon-1024.png，并通过 SHA-256 校验，
+源图固定为 tools/assets/QiuJi-Live-app-icon-1024.png，并通过 SHA-256 校验，
 避免资源在无意间被替换后仍生成出不可追溯的图标。
 
 输出（Android TV 工程）：
@@ -23,7 +23,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE_ICON = ROOT / "tools" / "assets" / "qiuji-live-app-icon-1024.png"
+SOURCE_ICON = ROOT / "tools" / "assets" / "QiuJi-Live-app-icon-1024.png"
 SOURCE_SHA256 = "8e50a882a7189006f5c8b85db77e6bbccc692f5249086a3b8d5da74795af818d"
 BRAND_NAME = "球迹直播"
 

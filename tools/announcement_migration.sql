@@ -1,4 +1,4 @@
--- My TV v1.20 运营公告 PG 迁移（2026-09-03）
+-- QiuJi-Live v1.20 运营公告 PG 迁移（2026-09-03）
 -- 通过 managePgDatabase(applyMigration) 执行；配套 hotupdate 云函数 GET /announce
 -- 与本地 admin_server.py 公告管理页。
 --

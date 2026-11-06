@@ -1,4 +1,4 @@
--- My TV PostgreSQL CU 降耗（2026-09-09）
+-- QiuJi-Live PostgreSQL CU 降耗（2026-09-09）
 -- 幂等，可重复执行。配套：hotupdate 云函数公告/热更查询缓存、客户端前台轮询门控。
 
 -- 公告公开接口的核心查询：where status='published' order by id desc limit 1。

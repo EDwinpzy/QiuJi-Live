@@ -1,4 +1,4 @@
--- My TV playback-source draft and immutable published-version storage.
+-- QiuJi-Live playback-source draft and immutable published-version storage.
 create extension if not exists pgcrypto;
 
 create table if not exists vod_source_drafts (

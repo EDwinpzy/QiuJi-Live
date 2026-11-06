@@ -1,6 +1,6 @@
 package com.qiubo.optimaltv.ui.player
 
-/** Football live first-frame wait and engine fallback policy. */
+/** QiuJi-Live first-frame wait and engine fallback policy. */
 object FirstFrameRecoveryPolicy {
 
     const val NORMAL_MS = 3_000L
