@@ -8,7 +8,7 @@
 输出（Android TV 工程）：
   mipmap-xxxhdpi/ic_launcher_fg.png  432x432 自适应图标前景
   mipmap-xhdpi/ic_launcher_fg.png    216x216 自适应图标前景
-  drawable/my_tv_logo.png            透明底白色“球迹直播”启动字标
+  drawable/qiuji_live_logo.png       透明底白色“球迹直播”启动字标
   drawable/ic_banner.png             640x360 TV banner（左侧图标、右侧品牌名）
 """
 from __future__ import annotations
@@ -45,7 +45,7 @@ SUPERSAMPLE = 4
 OUTPUT_SIZES = {
     "mipmap-xxxhdpi/ic_launcher_fg.png": (432, 432),
     "mipmap-xhdpi/ic_launcher_fg.png": (216, 216),
-    "drawable/my_tv_logo.png": None,  # 尺寸由字体排版决定
+    "drawable/qiuji_live_logo.png": None,  # 尺寸由字体排版决定
     "drawable/ic_banner.png": (640, 360),
 }
 
@@ -256,7 +256,7 @@ def validate_outputs() -> None:
                     f"图标主体超出自适应安全区：{res_root / relative} bbox={bbox}"
                 )
 
-        wordmark = open_png(res_root / "drawable" / "my_tv_logo.png")
+        wordmark = open_png(res_root / "drawable" / "qiuji_live_logo.png")
         alpha = wordmark.getchannel("A")
         alpha_min, alpha_max = alpha.getextrema()
         if alpha_min != 0 or alpha_max != 255:
@@ -294,7 +294,7 @@ def generate() -> None:
     for res_root in RES_ROOTS:
         save_png(icon_432, res_root / "mipmap-xxxhdpi" / "ic_launcher_fg.png")
         save_png(icon_216, res_root / "mipmap-xhdpi" / "ic_launcher_fg.png")
-        save_png(wordmark, res_root / "drawable" / "my_tv_logo.png")
+        save_png(wordmark, res_root / "drawable" / "qiuji_live_logo.png")
         save_png(banner, res_root / "drawable" / "ic_banner.png")
 
     validate_outputs()

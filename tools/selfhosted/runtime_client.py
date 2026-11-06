@@ -21,7 +21,7 @@ class EndpointConfig:
     public_base_url: str
     public_web_base_url: str
     hotupdate_endpoint: str
-    environment_name: str = "zuo-live-selfhosted"
+    environment_name: str = "QiuJi-Live-selfhosted"
     self_hosted: bool = True
 
     @property

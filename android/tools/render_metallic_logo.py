@@ -5,7 +5,7 @@ SVG 要素（200×200 画布）：
   - 圆角矩形 (36,54)-(164,146) r=18，线性渐变 userSpaceOnUse，gradientTransform=matrix(128 92 -92 128 0 0)
     渐变线起点 (0,0) → 终点 (128,92)，stops: 0:#8A8F98 .3:#E6E9EC .5:#9AA0A8 .7:#F2F4F6 1:#6E737C
   - 播放三角 (84,78)(84,122)(122,100)，填充 #1C1C1E
-输出：drawable/my_tv_logo.png、mipmap-{xhdpi,xxxhdpi}/ic_launcher_fg.png、drawable/ic_banner.png
+输出：drawable/qiuji_live_logo.png、mipmap-{xhdpi,xxxhdpi}/ic_launcher_fg.png、drawable/ic_banner.png
 """
 import numpy as np
 from PIL import Image
@@ -89,7 +89,7 @@ def main():
 
     # 启动屏 logo：200dp 画布 @4x
     logo800 = render_logo(800)
-    logo800.save(f"{res}/drawable/my_tv_logo.png")
+    logo800.save(f"{res}/drawable/qiuji_live_logo.png")
 
     # 桌面图标前景：logo 占画布 80%（圆角遮罩安全区 66.7%，图标角部最远点约 63%）
     for density, px in (("xhdpi", 216), ("xxxhdpi", 432)):

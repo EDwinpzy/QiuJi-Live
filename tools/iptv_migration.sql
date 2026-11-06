@@ -1,4 +1,4 @@
--- OptimalTV v1.20 后台动态更新电视直播源（需求 后台#8）PG 迁移
+-- QiuJi-Live v1.20 后台动态更新电视直播源（需求 后台#8）PG 迁移
 -- 通过 managePgDatabase(applyMigration) 执行。
 --
 -- 组成：

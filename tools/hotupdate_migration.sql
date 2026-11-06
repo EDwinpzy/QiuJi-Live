@@ -1,4 +1,4 @@
--- OptimalTV v1.18 热更新（公测版）PG 迁移
+-- QiuJi-Live v1.18 热更新（公测版）PG 迁移
 -- 通过 managePgDatabase(applyMigration) 执行；与 docs/热更新-方案与实施.md 配套。
 --
 -- 组成：

@@ -452,7 +452,7 @@ fun Modifier.dpadFocusable(
         }
 }
 
-private const val TAG = "OptimalTV"
+private const val TAG = "QiuJi-Live"
 
 private inline fun debugNavLog(message: () -> String) {
     if (BuildConfig.DEBUG && Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, message())
