@@ -34,6 +34,7 @@
 ### 功能
 
 - 查看足球赛程、比赛状态和球队信息。
+- 只展示英超、西甲、意甲、德甲、法甲、欧冠、欧联，以及双方均为主流成年国家队的比赛；国足对任意成年国家队的比赛同样保留，不展示其他联赛、杯赛、青年/女足或非足球赛事。
 - 为单场比赛选择可用直播信号源。
 - 播放 HLS 直播，并支持 TS 分片经本机后端中继。
 - 处理换线、重试、首帧恢复和长播放健康检查。
@@ -219,6 +220,7 @@ The Chinese product display name remains “球迹直播”. The engineering rep
 ### Features
 
 - Browse football fixtures, match status, and team information.
+- Show only the Premier League, La Liga, Serie A, Bundesliga, Ligue 1, the Champions League, the Europa League, and fixtures in which both teams are mainstream senior national teams; exclude other leagues, cups, youth/women's teams, and non-football events.
 - Select an available live source for an individual match.
 - Play HLS live streams, including TS-segment relay through the local backend.
 - Handle source switching, retries, first-frame recovery, and long-playback health checks.

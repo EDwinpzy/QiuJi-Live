@@ -49,17 +49,22 @@ class LiveMatchVisibilityTest {
         val eplFinished = match("epl-finished", "英超", status = "finished")
         val serieA = match("serie-a", "意甲")
         val important = match("important", "西甲", home = "皇家马德里")
-        val csl = match("csl", "中超")
-        val faCup = match("fa-cup", "足协杯")
-        val europe = match("europe", "欧冠淘汰赛")
+        val championsLeague = match("champions-league", "欧冠淘汰赛")
+        val europaLeague = match("europa-league", "欧联杯")
+        val conferenceLeague = match("conference-league", "欧协联")
         val national = match("national", "世界杯")
-        val all = listOf(epl, eplFinished, serieA, important, csl, faCup, europe, national)
+        val all = listOf(
+            epl, eplFinished, serieA, important,
+            championsLeague, europaLeague, conferenceLeague, national,
+        )
 
         assertEquals(listOf(epl), visibleLiveScheduleMatches(all, "英超"))
         assertEquals(listOf(serieA), visibleLiveScheduleMatches(all, "意甲"))
         assertEquals(listOf(important, national), visibleLiveScheduleMatches(all, "important"))
-        assertEquals(listOf(csl, faCup), visibleLiveScheduleMatches(all, "中超"))
-        assertEquals(listOf(europe), visibleLiveScheduleMatches(all, "euro"))
+        assertEquals(
+            listOf(championsLeague, europaLeague),
+            visibleLiveScheduleMatches(all, "euro"),
+        )
         assertEquals(listOf(national), visibleLiveScheduleMatches(all, "national"))
     }
 
@@ -100,10 +105,18 @@ class LiveMatchVisibilityTest {
     @Test
     fun staleSnapshotCannotReplaceAMatchListAlreadyReturnedByFreshRequest() {
         val cached = listOf(MatchItem("cached", "旧主队", "旧客队", league = "英超"))
-        val fresh = LiveUiState(loading = false, matches = listOf(MatchItem("fresh", "新主队", "新客队")))
+        val fresh = LiveUiState(
+            loading = false,
+            matches = listOf(MatchItem("fresh", "新主队", "新客队")),
+            refreshFinished = true,
+            freshData = true,
+        )
 
         assertNull(snapshotFallbackState(fresh, cached))
-        assertEquals(cached, snapshotFallbackState(LiveUiState(), cached)?.matches)
+        val restored = snapshotFallbackState(LiveUiState(), cached)
+        assertEquals(cached, restored?.matches)
+        assertFalse(restored?.refreshFinished ?: true)
+        assertFalse(restored?.freshData ?: true)
     }
 
     @Test
@@ -118,11 +131,29 @@ class LiveMatchVisibilityTest {
     @Test
     fun refreshFailureKeepsPreviouslyLoadedMatches() {
         val previous = MatchItem("live", "甲队", "乙队", league = "英超")
-        val failed = liveMatchFailureState(LiveUiState(loading = false, matches = listOf(previous)), "断网")
+        val failed = liveMatchFailureState(
+            LiveUiState(loading = false, matches = listOf(previous), freshData = true),
+            "断网",
+        )
 
         assertFalse(failed.loading)
         assertEquals(listOf(previous), failed.matches)
         assertNull(failed.error)
+        assertTrue(failed.refreshFinished)
+        assertTrue(failed.freshData)
+    }
+
+    @Test
+    fun coldSnapshotIsNotTreatedAsFreshForVoiceResolution() {
+        val cached = MatchItem("snapshot", "国际米兰", "罗马", league = "意甲", status = "upcoming")
+        val restored = snapshotFallbackState(LiveUiState(), listOf(cached))
+
+        assertFalse(restored?.refreshFinished ?: true)
+        assertFalse(restored?.freshData ?: true)
+
+        val failed = liveMatchFailureState(restored!!, "断网")
+        assertTrue(failed.refreshFinished)
+        assertFalse(failed.freshData)
     }
 
     @Test

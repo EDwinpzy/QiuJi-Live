@@ -1,5 +1,17 @@
 # AGENTS.md — QiuJi-Live 仓库约定
 
+## Agent Quick Card
+
+- **唯一交付客户端**：`android/`，包名 `com.qiubo.optimaltv.public`；目标是 Android TV / 投影仪。
+- **内嵌后端**：`tools/backend-src/`；改后端后先运行 `python tools/build_backend_zip.py`，再构建 APK。
+- **Android 构建**：从仓库根目录执行 `cd android`，然后 `.\gradlew.bat assembleDebug`。
+- **Android 单测**：在 `android/` 执行 `.\gradlew.bat testDebugUnitTest`。
+- **后端测试**：`python -m unittest discover -s tools/backend-src/tests -p "test_*.py"`。
+- **工具测试**：`python -m unittest discover -s tools/tests -p "test_*.py"`。
+- **搜索跳过**：`android/build/`、`android/.gradle/`、`android/out/`、`apk/`、`artifacts/`、`node_modules/`、`__pycache__/`。
+- **发布**：仅在用户当前请求明确要求时执行；保持包名和签名不变，先重建内嵌后端，再构建并验收 APK。
+- **非交付入口**：`后台管理系统/` 不是 TV 客户端，不要把它当发布入口。
+
 ## 并行委派
 
 - 有两个或以上独立、边界清楚且可安全并行的子任务时，默认分派子 Agent 并行处理，以缩短耗时；每个 Agent 必须拥有明确且互不重叠的文件或模块范围。

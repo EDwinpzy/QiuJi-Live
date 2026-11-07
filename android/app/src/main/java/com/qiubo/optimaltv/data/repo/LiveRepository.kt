@@ -55,27 +55,80 @@ class LiveRepository(
         /** 足球 hero 海报池大小（2026-08-29 换新海报：tools/build_backend_zip.py 写入 fb-01..36.jpg） */
         const val POSTER_POOL = 36
 
-        /** 原版 hero 重要度：live+1000 / 有比分+100 / 五大联赛+50 / 欧战国赛+40。
-         *  v1.16：中超并入头部联赛权重（用户需求「增加中超球队的比赛」） */
-        private val TOP_LEAGUE_RE = Regex("^(英超|西甲|意甲|德甲|法甲|中超|足协杯)")
-        private val NAT_RE = Regex("欧冠|欧联|欧协|欧国联|世预赛|欧预赛|欧洲杯|亚洲杯|美洲杯|世界杯|友谊赛|国家队")
+        /** 原版 hero 重要度：live+1000 / 有比分+100 / 五大联赛+50 / 欧战与国赛+40。 */
+        private val TOP_LEAGUE_RE = Regex("^(英超|西甲|意甲|德甲|法甲)")
+        private val NAT_RE = Regex("欧冠|欧联|欧罗巴|欧国联|世预赛|欧预赛|欧洲杯|亚洲杯|美洲杯|世界杯|友谊赛|国家队")
 
         /**
-         * 主流赛事白名单（2026-08-28 用户需求「过滤掉非主流比赛」后的收紧版）：
-         * 仅保留五大联赛、欧战俱乐部赛事、国家队大赛、传统豪门杯赛与荷甲/葡超/中超。
-         * 罗甲/沙特联/巴西杯/阿根廷杯/J联赛/墨联/各类男篮女篮等小众赛事全部剔除。
+         * 严格赛事白名单（2026-11-06 用户需求）：
+         * 仅保留五大联赛、欧冠/欧联、双方均为主流成年国家队的比赛，以及国足比赛。
+         * 中超、亚冠、荷甲/葡超、各国杯赛、欧协/世俱杯和青年/女足赛事全部剔除。
          */
-        private val NON_FOOTBALL_RE = Regex("菲NCAA|男篮|女篮|篮球|排球|网球|琼斯杯|NBL|NBA|CBA|WNBA|冰球|棒球|橄榄球|乒乓|羽毛")
-        private val EURO_CLUB_CUP_RE = Regex("欧冠|欧联|欧协|欧会|欧超|世俱|欧国联|欧罗巴")
-        /** 亚洲俱乐部赛事（2026-09-15 补）：亚冠精英赛 / 亚冠联2——中超球队常年参赛，
-         *  收紧白名单漏掉它之后，「今日比赛」在只有亚冠比赛的日子会整块空掉
-         *  （实测 09-15：当天 4 场全是亚冠，界面显示「暂无比赛」，其中 2 场正在直播）。 */
-        private val ASIA_CLUB_CUP_RE = Regex("亚冠")
-        private val MAJOR_LEAGUE_RE = Regex("^(英超|西甲|意甲|德甲|法甲|荷甲|葡超|中超)")
-        /** 中国赛事通道（v1.16 用户需求「增加中超球队的比赛」）：中超联赛+足协杯（参赛队=中超球队） */
-        private val CHINA_COMP_RE = Regex("中超|足协杯")
-        private val MAJOR_CUP_RE = Regex("^(英联杯|足总杯|社区盾|国王杯|西班牙超级杯|西超杯|意大利杯|意超杯|德国杯|德超杯|法国杯|法超杯|超级杯)")
-        private val NAT_COMP_RE = Regex("世预赛|欧预赛|欧国联|欧洲杯|美洲杯|亚洲杯|世界杯|友谊赛|国家队|亚运|奥运会|金杯赛|非洲杯|麒麟杯")
+        private val NON_FOOTBALL_RE = Regex(
+            "菲NCAA|男篮|女篮|篮球|排球|女排|男排|网球|羽毛球|乒乓球|棒球|冰球|橄榄球|手球|" +
+                "拳击|搏击|综合格斗|斯诺克|台球|高尔夫|赛车|F1|电竞|电子竞技|" +
+                "琼斯杯|NBL|NBA|CBA|WNBA|MLB|NFL|NHL|UFC|ATP|WTA|" +
+                "田径|游泳|体操|跳水|举重|摔跤|柔道|跆拳道|水球|曲棍球",
+            RegexOption.IGNORE_CASE,
+        )
+        /** 用户只要求欧冠、欧联；欧协/欧会/欧超/世俱不在俱乐部杯赛白名单。 */
+        private val EURO_CLUB_CUP_RE = Regex("^(欧冠|欧洲冠军联赛|欧联|欧罗巴)")
+        /** 青年、女足、梯队和奥运序列不属于主流成年国家队/俱乐部赛事。 */
+        private val NON_SENIOR_RE = Regex(
+            "女足|女子|女青|女队|女奥|U-?\\d{1,2}|青年|国奥|国青|国少|" +
+                "奥运|亚运|大运|预备队|后备队|二队|B队|青年队",
+            RegexOption.IGNORE_CASE,
+        )
+        private val NATIONAL_TEAM_SUFFIX_RE = Regex(
+            "(?:国家男子足球队|国家足球队|男子足球队|国家男子队|男子国家队|" +
+                "足球队|国家队|男足队|男子队|男足|男队|队)$",
+        )
+        /** 国足没有对手白名单限制：中国成年男足对任意成年国家队都保留。 */
+        private const val CHINA_NATIONAL_TEAM = "中国"
+
+        /**
+         * 纯筛选规则，便于单测和快照复用。nationalTeams 需为已归一化的成年国家队集合。
+         * 国家队比赛必须双方都在白名单中，不能只凭“世界杯/友谊赛”等赛事名放行；
+         * 国足（中国成年男足）例外，对任意成年国家队都保留。
+         */
+        internal fun isStrictFootballMatch(
+            league: String,
+            home: String,
+            away: String,
+            nationalTeams: Set<String>,
+        ): Boolean {
+            val l = league.trim()
+            val h = home.trim()
+            val a = away.trim()
+            if (l.isEmpty() || h.isEmpty() || a.isEmpty()) return false
+            if (NON_FOOTBALL_RE.containsMatchIn(l) ||
+                NON_FOOTBALL_RE.containsMatchIn(h) ||
+                NON_FOOTBALL_RE.containsMatchIn(a)
+            ) return false
+            if (NON_SENIOR_RE.containsMatchIn(l) ||
+                NON_SENIOR_RE.containsMatchIn(h) ||
+                NON_SENIOR_RE.containsMatchIn(a)
+            ) return false
+            if (TOP_LEAGUE_RE.containsMatchIn(l)) return true
+            if (EURO_CLUB_CUP_RE.containsMatchIn(l)) return true
+            val homeTeam = normalizeNationalTeamName(h)
+            val awayTeam = normalizeNationalTeamName(a)
+            if (
+                CHINA_NATIONAL_TEAM in nationalTeams &&
+                (homeTeam == CHINA_NATIONAL_TEAM || awayTeam == CHINA_NATIONAL_TEAM)
+            ) return true
+            return homeTeam in nationalTeams && awayTeam in nationalTeams
+        }
+
+        private fun normalizeNationalTeamName(value: String): String {
+            var name = value.trim().replace(TEAM_SPACE_RE, "")
+            while (true) {
+                if (name == "国足" || name == "中国国足") return CHINA_NATIONAL_TEAM
+                val next = name.replace(NATIONAL_TEAM_SUFFIX_RE, "")
+                if (next == name) return name
+                name = next
+            }
+        }
         fun heroImportance(m: MatchItem): Int {
             var s = 0
             if (m.isLive) s += 1000
@@ -193,12 +246,9 @@ class LiveRepository(
         }
     }
 
-    /** 原版足球过滤表（isMainstreamMatch 依赖，assets/football_filters.json） */
+    /** 严格赛事过滤表：只读取主流成年国家队集合，避免旧杯赛关键词继续扩大范围。 */
     private data class FootballFilters(
-        val top5: Set<String>,
         val national: Set<String>,
-        val natKeywords: List<String>,
-        val cups: List<String>,
     )
 
     private val filters: FootballFilters by lazy {
@@ -207,36 +257,15 @@ class LiveRepository(
             fun arr(k: String): Set<String> = buildSet {
                 o.optJSONArray(k)?.let { a -> for (i in 0 until a.length()) add(a.getString(i)) }
             }
-            FootballFilters(arr("TOP5_TEAMS"), arr("NATIONAL_TEAMS"), arr("NAT_MATCH_KEYWORDS").toList(), arr("MAIN_CUPS").toList())
-        }.getOrDefault(FootballFilters(emptySet(), emptySet(), emptyList(), emptyList()))
+            FootballFilters(
+                arr("NATIONAL_TEAMS").mapTo(linkedSetOf()) { normalizeNationalTeamName(it) },
+            )
+        }.getOrDefault(FootballFilters(emptySet()))
     }
 
-    /** 主流赛事判定（2026-08-28 收紧）：剔除篮球/小联赛/非主流杯赛，
-     *  仅保留五大联赛+荷甲葡超中超、欧战、国家队大赛、传统豪门杯赛（杯赛卡双知名球队）。 */
-    fun isMainstreamMatch(m: MatchItem): Boolean {
-        val f = filters
-        val L = m.league
-        // 非足球赛事整体剔除（男篮世预赛/女篮等此前混入）
-        if (NON_FOOTBALL_RE.containsMatchIn(L) ||
-            NON_FOOTBALL_RE.containsMatchIn(m.home) || NON_FOOTBALL_RE.containsMatchIn(m.away)
-        ) return false
-        if (TOP_LEAGUE_RE.containsMatchIn(L)) return true
-        if (MAJOR_LEAGUE_RE.containsMatchIn(L)) return true
-        if (CHINA_COMP_RE.containsMatchIn(L)) return true
-        // 欧战（欧冠/欧联/欧协等）：参赛队遍布各国联赛，直接保留
-        if (EURO_CLUB_CUP_RE.containsMatchIn(L)) return true
-        // 亚洲俱乐部赛事（亚冠精英赛/亚冠联2）：同为洲际赛事，含中超球队，直接保留
-        if (ASIA_CLUB_CUP_RE.containsMatchIn(L)) return true
-        // 国家队大赛（世预赛/欧国联/友谊赛/亚洲杯…）
-        if (NAT_COMP_RE.containsMatchIn(L)) return true
-        // 传统豪门杯赛：需至少一方知名球队（top5 表 + 国家队表）
-        if (MAJOR_CUP_RE.containsMatchIn(L)) {
-            val hTop = m.home in f.top5; val aTop = m.away in f.top5
-            val hNat = m.home in f.national; val aNat = m.away in f.national
-            return (hTop || hNat) && (aTop || aNat)
-        }
-        return false
-    }
+    /** 严格赛事判定：五大联赛、欧冠/欧联、主流成年国家队对阵，或国足比赛。 */
+    fun isMainstreamMatch(m: MatchItem): Boolean =
+        isStrictFootballMatch(m.league, m.home, m.away, filters.national)
 
     private fun todayTomorrowKeys(): Pair<String, String> {
         val zone = java.util.TimeZone.getTimeZone("Asia/Shanghai")
@@ -289,35 +318,23 @@ class LiveRepository(
         }.filter {
             it.matchId.isNotBlank() && it.home.isNotBlank() && it.away.isNotBlank()
         }
-        // v1.16 防死页三级回退（用户报障「什么比赛都没了，光标也不动」）：
-        // ① 常规 = 主流赛事 × 今日/明日；② 当前正在直播的足球比赛无论联赛级别都必须保留，
-        //    否则澳超/J联赛等真实直播会被主流白名单挡掉；③ 空则回退「全部主流赛事不限日期」；
-        //    ④ 仍空（白名单全不命中）才回退全部足球比赛兜底。
+        // 只展示通过严格赛事判定的比赛：今日/明日优先；没有今日/明日时展示全部合规赛事。
+        // 不再让“正在直播”绕过白名单，也不再用全部足球兜底（避免澳超、杯赛、篮球泄漏）。
         val mainstream = list.filter { isMainstreamMatch(it) }
-        val liveFootballIds = list.asSequence()
-            .filter { it.isLive }
-            .filterNot {
-                NON_FOOTBALL_RE.containsMatchIn(it.league) ||
-                    NON_FOOTBALL_RE.containsMatchIn(it.home) ||
-                    NON_FOOTBALL_RE.containsMatchIn(it.away)
-            }
-            .map { it.matchId }
-            .toSet()
         fun matchDay(value: String): String = Regex("^(?:\\d{4}-)?(\\d{2}-\\d{2})$")
             .find(value.trim())?.groupValues?.get(1).orEmpty()
+        val preferred = mainstream.filter {
+            it.isLive || matchDay(it.date) == today || matchDay(it.date) == tomorrow
+        }
         val finalList = when {
-            mainstream.any { matchDay(it.date) == today || matchDay(it.date) == tomorrow } ->
-                list.filter {
-                    it.matchId in liveFootballIds ||
-                        (isMainstreamMatch(it) && (matchDay(it.date) == today || matchDay(it.date) == tomorrow))
-                }
+            preferred.isNotEmpty() -> preferred
             mainstream.isNotEmpty() -> {
-                OtvLog.w("matches 今日/明日无主流赛事 → 回退全量主流 ${mainstream.size} 场（不限日期）")
+                OtvLog.w("matches 今日/明日无合规主流赛事 → 展示全部合规赛事 ${mainstream.size} 场")
                 mainstream
             }
             else -> {
-                OtvLog.w("matches 主流白名单零命中 → 回退全部足球 ${list.size} 场兜底")
-                list
+                OtvLog.w("matches 严格赛事白名单零命中 → 显示空列表（不回退全部足球）")
+                emptyList()
             }
         }
         matchesCache = System.currentTimeMillis() to finalList
@@ -350,7 +367,7 @@ class LiveRepository(
                 homeScore = o.optString("hs"), awayScore = o.optString("as"),
                 channels = channels,
             ).takeIf { it.matchId.isNotBlank() }
-        }.takeIf { it.isNotEmpty() }?.also {
+        }.filter { isMainstreamMatch(it) }.takeIf { it.isNotEmpty() }?.also {
             // 快照同时写入内存缓存（60s TTL）：冷启动快照态点卡进直播时 srcsFor
             // 也能拿到动态 channels（否则回退硬编码源表）；后台 refresh 到货后自然替换
             matchesCache = System.currentTimeMillis() to it

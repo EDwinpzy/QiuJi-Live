@@ -19,7 +19,7 @@ object ExitCoordinator {
 
     fun exit(activity: Activity) {
         if (!exitStarted.compareAndSet(false, true)) return
-        OtvLog.i("explicit exit: release playback helpers and backend")
+        OtvLog.i("explicit exit: remove task, release helpers, and end owned processes")
         AppLifecycleManager.shutdown()
         HotUpdateManager.shutdown()
         StreamDecryptServer.shutdown()
@@ -30,11 +30,12 @@ object ExitCoordinator {
         val serviceIntent = Intent(activity, BackendService::class.java)
         runCatching {
             activity.startService(serviceIntent.setAction(BackendService.ACTION_SHUTDOWN))
-        }
-        runCatching { activity.stopService(serviceIntent) }
-        activity.finishAffinity()
+        }.onFailure { OtvLog.w("explicit exit: backend shutdown 指令下发失败: ${it.message}") }
+        // 删除最近任务，避免用户从“最近使用”再次进入仍活着的旧会话。
+        activity.finishAndRemoveTask()
         Handler(Looper.getMainLooper()).postDelayed({
             stopOwnedProcesses(activity)
+            OtvLog.i("explicit exit: kill main process")
             android.os.Process.killProcess(android.os.Process.myPid())
         }, 700L)
     }

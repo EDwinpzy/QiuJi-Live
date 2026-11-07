@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +58,7 @@ import androidx.compose.animation.togetherWith   // 需求⑦：hero 切换动�
 import coil.compose.AsyncImage
 import com.qiubo.optimaltv.Graph
 import com.qiubo.optimaltv.data.model.MatchItem
+import com.qiubo.optimaltv.lifecycle.HomeBackState
 import com.qiubo.optimaltv.ui.components.FocusRegistry
 import com.qiubo.optimaltv.ui.components.InitialFocusEffect
 import com.qiubo.optimaltv.ui.components.NAV_DOWN
@@ -70,6 +73,8 @@ import com.qiubo.optimaltv.ui.theme.OtvColors
 import com.qiubo.optimaltv.ui.theme.rememberUiScale
 import com.qiubo.optimaltv.ui.theme.sx
 import com.qiubo.optimaltv.ui.theme.sxs
+import com.qiubo.optimaltv.voice.VoiceMatchRequestBus
+import com.qiubo.optimaltv.voice.VoiceMatchSelector
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -87,6 +92,8 @@ data class LiveUiState(
     val error: String? = null,
     val matches: List<MatchItem> = emptyList(),
     val leagues: List<String> = emptyList(),
+    val refreshFinished: Boolean = false,
+    val freshData: Boolean = false,
 )
 
 internal fun snapshotFallbackState(current: LiveUiState, snapshot: List<MatchItem>): LiveUiState? {
@@ -100,8 +107,11 @@ internal fun snapshotFallbackState(current: LiveUiState, snapshot: List<MatchIte
 }
 
 internal fun liveMatchFailureState(current: LiveUiState, message: String): LiveUiState =
-    if (current.matches.isEmpty()) current.copy(loading = false, error = message)
-    else current.copy(loading = false, error = null)
+    if (current.matches.isEmpty()) {
+        current.copy(loading = false, error = message, refreshFinished = true)
+    } else {
+        current.copy(loading = false, error = null, refreshFinished = true)
+    }
 
 internal fun liveRefreshDue(lastAttemptAt: Long, now: Long): Boolean =
     lastAttemptAt <= 0L || now - lastAttemptAt >= 9_500L
@@ -149,7 +159,13 @@ class LiveViewModel : ViewModel() {
                 val leagues = matches.map { it.league }.filter { it.isNotBlank() }.distinct()
                 com.qiubo.optimaltv.OtvLog.i("matches 加载成功 ${matches.size} 场")
                 matchStartCache.clear()
-                _ui.value = LiveUiState(loading = false, matches = matches, leagues = leagues)
+                _ui.value = LiveUiState(
+                    loading = false,
+                    matches = matches,
+                    leagues = leagues,
+                    refreshFinished = true,
+                    freshData = true,
+                )
             } catch (e: Exception) {
                 com.qiubo.optimaltv.OtvLog.e("matches 加载失败: ${e.message}")
                 // 初次请求即使由静默轮询触发，空页面也要结束 loading 并显示错误；已有数据则保留。
@@ -209,10 +225,10 @@ class LiveViewModel : ViewModel() {
     }
 }
 
-/** 重要度（原版 heroImportance：live+1000 有比分+100 五大联赛/中超+50 欧战国国赛+40） */
+/** 重要度（原版 heroImportance：live+1000 有比分+100 五大联赛+50 欧战/国赛+40） */
 private object LiveViewModelImportance {
-    private val top5 = Regex("^(英超|西甲|意甲|德甲|法甲|中超|足协杯)")
-    private val nat = Regex("欧冠|欧联|欧协|欧国联|世预赛|欧预赛|欧洲杯|亚洲杯|美洲杯|世界杯|友谊赛|国家队")
+    private val top5 = Regex("^(英超|西甲|意甲|德甲|法甲)")
+    private val nat = Regex("欧冠|欧联|欧罗巴|欧国联|世预赛|欧预赛|欧洲杯|亚洲杯|美洲杯|世界杯|友谊赛|国家队")
     fun of(m: MatchItem): Int {
         var s = 0
         if (m.isLive) s += 1000
@@ -241,6 +257,7 @@ internal object TvLiveLayout {
 @Composable
 fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val voiceRequest by VoiceMatchRequestBus.pending.collectAsState()
     val refreshEpoch by com.qiubo.optimaltv.lifecycle.AppLifecycleManager.refreshEpoch.collectAsStateWithLifecycle()
     val s = rememberUiScale()
     // 400 设计像素卡宽给队名和联赛名留出空间；1920 宽下每行 4 张并留出安全边距。
@@ -254,12 +271,17 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
     var restoredFocus by remember { mutableStateOf(false) }
     var initialFocusDone by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val atTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
     var leagueFilter by rememberSaveable { mutableStateOf("all") }
     val filterFocusRequesters = remember {
         LEAGUE_FILTERS.associate { (key, _) -> key to FocusRequester() }
     }
     val backScope = androidx.compose.runtime.rememberCoroutineScope()
-    val heroFocused = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val heroFocused = remember { mutableStateOf(false) }
     val retryFocus = remember { FocusRequester() }
     val visibleMatches = remember(ui.matches, leagueFilter) {
         visibleLiveScheduleMatches(ui.matches, leagueFilter)
@@ -297,6 +319,10 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
     val heroes = remember(ui.matches) { vm.heroList(ui.matches) }
     val heroIdx = heroes.indexOfFirst { it.matchId == heroId }.takeIf { it >= 0 } ?: 0
     val heroBtnFocus = remember { FocusRequester() }
+    LaunchedEffect(atTop) { HomeBackState.update(atTop) }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { HomeBackState.update(false) }
+    }
     // 数据就绪后优先落到“立即观看”；没有 hero 时落到第一张可见比赛卡。
     InitialFocusEffect(
         heroBtnFocus,
@@ -349,9 +375,6 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
         }
     }
 
-    // 单页首页只在 hero 上双击退出，首按轻提示。
-    val exitApp = com.qiubo.optimaltv.ui.components.rememberDoubleBackExit { hint = it }
-
     fun playMatch(m: MatchItem) {
         // 需求 足球#4：开赛前 10 分钟内才允许进入直播，其余情况提示；已完场提示结束
         // v1.23：后端完场状态值是 "finished"（parse_matches），旧版误查 "ended"
@@ -374,6 +397,54 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
         nav.navigate("player/" + URLEncoder.encode(m.matchId, "UTF-8"))
     }
 
+    // Voice commands must land on the live picture itself. A scheduled or finished fixture is not
+    // treated as a success; the user gets a status hint instead of a fake player screen.
+    LaunchedEffect(
+        voiceRequest?.id,
+        ui.loading,
+        ui.matches,
+        ui.error,
+        ui.refreshFinished,
+        ui.freshData,
+    ) {
+        val request = voiceRequest ?: return@LaunchedEffect
+        if (ui.loading && ui.matches.isEmpty()) return@LaunchedEffect
+        if (ui.matches.isEmpty()) {
+            if (ui.error != null && VoiceMatchRequestBus.consume(request.id)) {
+                hint = "赛程加载失败，无法打开${request.query}的直播"
+            }
+            return@LaunchedEffect
+        }
+        if (!ui.refreshFinished) {
+            hint = "正在确认${request.query}的直播赛程…"
+            return@LaunchedEffect
+        }
+        if (!ui.freshData) {
+            if (VoiceMatchRequestBus.consume(request.id)) {
+                hint = "赛程刷新失败，无法确认${request.query}是否正在直播"
+            }
+            return@LaunchedEffect
+        }
+
+        val match = VoiceMatchSelector.select(ui.matches, request.query)
+        if (!VoiceMatchRequestBus.consume(request.id)) return@LaunchedEffect
+        when {
+            match == null -> hint = "未找到${request.query}的比赛"
+            match.isLive -> {
+                heroId = match.matchId
+                com.qiubo.optimaltv.OtvLog.i(
+                    "voice-match → player ${match.home} vs ${match.away} matchId=${match.matchId}",
+                )
+                nav.navigate("player/" + URLEncoder.encode(match.matchId, "UTF-8"))
+            }
+            else -> {
+                heroId = match.matchId
+                listState.scrollToItem(0)
+                hint = "${match.home} vs ${match.away}${match.displayStatus}，暂无可打开的直播画面"
+            }
+        }
+    }
+
     InitialFocusEffect(
         retryFocus,
         "live-retry",
@@ -390,11 +461,12 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
         onDispose { }
     }
 
-    BackHandler {
-        val atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+    // 只在需要从列表深处回到 Hero 时消费返回键；Hero 顶层交回 Activity，
+    // 否则 Compose BackHandler 会把双击退出的按键一起吞掉。
+    BackHandler(enabled = !atTop) {
         when {
             // 卡片等深层内容 BACK → 返回 hero；hero BACK → 双击退出。
-            heroes.isNotEmpty() && (!atTop || !heroFocused.get()) -> backScope.launch {
+            heroes.isNotEmpty() && (!atTop || !heroFocused.value) -> backScope.launch {
                 listState.scrollToItem(0)
                 repeat(10) {
                     if (runCatching { heroBtnFocus.requestFocus() }.isSuccess) return@launch
@@ -405,7 +477,8 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
                 listState.scrollToItem(0)
                 focusFirstVisibleCard()
             }
-            else -> exitApp()
+            // 顶层由 MainActivity 接收；保留这个分支仅防止状态在按键分发瞬间变化。
+            else -> Unit
         }
     }
 
@@ -470,7 +543,7 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
                             s = s,
                             heroBtnFocus = heroBtnFocus,
                             backScope = backScope,
-                            onHeroFocused = { heroFocused.set(it) },
+                            onHeroFocused = { heroFocused.value = it },
                             listState = listState,
                             onFocusFilters = { backScope.launch { focusLeagueFilters() } },
                             onPlay = ::playMatch,
@@ -928,21 +1001,19 @@ val LEAGUE_FILTERS = listOf(
     "意甲" to "意甲",
     "德甲" to "德甲",
     "法甲" to "法甲",
-    "中超" to "中超",
     "euro" to "欧战",
     "national" to "国家队",
 )
 
-private val EURO_RE = Regex("欧冠|欧联|欧协|欧罗巴|欧国联|欧会杯")
-private val NATIONAL_RE = Regex("世预赛|欧预赛|欧洲杯|亚洲杯|美洲杯|世界杯|友谊赛|国家队|国联")
+private val EURO_RE = Regex("欧冠|欧洲冠军联赛|欧联|欧罗巴")
+private val NATIONAL_RE = Regex("世预赛|欧预赛|欧洲杯|亚洲杯|美洲杯|世界杯|友谊赛|国家队|欧国联|东亚杯")
 
-/** 筛选语义与旧版一致：重要按球队/国家队大赛，欧战和国家队为归并类。 */
+/** 筛选语义：重要按球队/国家队大赛，欧战只归并欧冠/欧联，国家队按赛事名归并。 */
 fun matchLeagueFilter(match: MatchItem, key: String): Boolean = when (key) {
     "all" -> true
     "important" -> ImportantTeamPolicy.isImportant(match)
     "euro" -> EURO_RE.containsMatchIn(match.league)
     "national" -> NATIONAL_RE.containsMatchIn(match.league)
-    "中超" -> match.league.contains("中超") || match.league.contains("足协杯")
     else -> match.league.contains(key)
 }
 

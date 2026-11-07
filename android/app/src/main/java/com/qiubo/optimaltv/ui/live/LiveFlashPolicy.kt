@@ -21,14 +21,15 @@ object TodayMatchPager {
 }
 
 object ImportantTeamPolicy {
-    private val aliases = listOf(
+    internal val aliasGroups = listOf(
         setOf("曼联", "曼彻斯特联"), setOf("曼城", "曼彻斯特城"), setOf("利物浦"),
         setOf("阿森纳"), setOf("切尔西"), setOf("热刺", "托特纳姆热刺"),
         setOf("皇马", "皇家马德里"), setOf("巴萨", "巴塞罗那"), setOf("马竞", "马德里竞技"),
         setOf("拜仁", "拜仁慕尼黑"), setOf("多特", "多特蒙德"),
         setOf("国际米兰", "国米"), setOf("AC米兰", "米兰"), setOf("尤文", "尤文图斯"),
         setOf("巴黎圣日耳曼", "巴黎"), setOf("那不勒斯"), setOf("罗马"), setOf("勒沃库森")
-    ).flatten()
+    )
+    private val aliases = aliasGroups.flatten()
     private val majorNational = Regex("世界杯|欧洲杯|美洲杯|亚洲杯|欧国联|世预赛|欧预赛|国家队")
     fun isImportant(match: MatchItem): Boolean =
         aliases.any { match.home.contains(it, true) || match.away.contains(it, true) } ||

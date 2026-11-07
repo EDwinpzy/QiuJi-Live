@@ -2,7 +2,12 @@ package com.qiubo.optimaltv
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -16,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,9 +34,17 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
+import com.qiubo.optimaltv.lifecycle.DoubleBackDecision
+import com.qiubo.optimaltv.lifecycle.DoubleBackExitPolicy
+import com.qiubo.optimaltv.lifecycle.ExitCoordinator
+import com.qiubo.optimaltv.lifecycle.HomeBackState
+import com.qiubo.optimaltv.ui.components.OtvHint
 import com.qiubo.optimaltv.ui.live.LiveScreen
 import com.qiubo.optimaltv.ui.player.PlayerScreen
 import com.qiubo.optimaltv.ui.theme.QiuJiLiveTheme
+import com.qiubo.optimaltv.voice.VoiceMatchIntents
+import com.qiubo.optimaltv.voice.VoiceMatchRequestBus
 
 /** 调试直达播放页通道（v1.8 2026-08-30）：debug 构建 DebugNavReceiver 广播写入 pending，
  *  AppRoot 轮询消费——绕过模拟器丢键/焦点漂移，测试直播链路用。
@@ -39,6 +53,25 @@ object DebugNavBus {
     @Volatile var pendingMatchId: String? = null
     /** 直播引擎强制（仅测试注入：am start --es otvEngine vlc） */
     @Volatile var pendingEngine: String? = null
+}
+
+/**
+ * Compose 路由给 Activity 返回策略提供只读快照。
+ *
+ * [version] 在每次真实路由变化时递增；离开首页再回来必须重置双击窗口，
+ * 不能把“播放器返回首页”当作首页第一次返回。
+ */
+object AppRouteState {
+    @Volatile var route: String? = "live"
+        private set
+    @Volatile var version: Long = 0L
+        private set
+
+    fun update(newRoute: String?) {
+        if (route == newRoute) return
+        route = newRoute
+        version++
+    }
 }
 
 /** 球迹直播启动屏：黑底、品牌图标与加载提示。 */
@@ -60,6 +93,54 @@ private fun StartupSplash() {
 /** 单 Activity：唯一主页面为足球赛程，另含足球播放器。 */
 class MainActivity : ComponentActivity() {
 
+    private val backExitPolicy = DoubleBackExitPolicy()
+    private var pendingExitRouteVersion = -1L
+    private var pendingExitHomeVersion = -1L
+    private var consumeBackKeyUp = false
+    private val exitHint = mutableStateOf<String?>(null)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val clearExitHint = Runnable { exitHint.value = null }
+
+    private fun showExitHint() {
+        exitHint.value = "再按一次退出应用"
+        mainHandler.removeCallbacks(clearExitHint)
+        mainHandler.postDelayed(clearExitHint, com.qiubo.optimaltv.lifecycle.DOUBLE_BACK_EXIT_WINDOW_MS)
+    }
+
+    private fun resetPendingBackExit() {
+        backExitPolicy.reset()
+        pendingExitRouteVersion = -1L
+        pendingExitHomeVersion = -1L
+    }
+
+    /** 已确认首页处于退出点（或 Compose 返回处理器不可用）时调用。 */
+    private fun handleHomeBack(): Boolean {
+        val routeVersion = AppRouteState.version
+        val homeVersion = HomeBackState.version
+        if (
+            pendingExitRouteVersion != -1L &&
+            (pendingExitRouteVersion != routeVersion || pendingExitHomeVersion != homeVersion)
+        ) {
+            resetPendingBackExit()
+        }
+        return when (backExitPolicy.onBack(SystemClock.elapsedRealtime())) {
+            DoubleBackDecision.EXIT -> {
+                resetPendingBackExit()
+                consumeBackKeyUp = true
+                com.qiubo.optimaltv.OtvLog.i("double-back: exit task and owned processes")
+                ExitCoordinator.exit(this)
+                true
+            }
+            DoubleBackDecision.PROMPT -> {
+                pendingExitRouteVersion = routeVersion
+                pendingExitHomeVersion = homeVersion
+                consumeBackKeyUp = true
+                showExitHint()
+                true
+            }
+        }
+    }
+
     // v1.13 集中式导航：四方向键在 Activity 层直接交 OtvNav 引擎，处理不了也消费——
     // Compose 焦点系统从此收不到方向键，其兜底几何搜索（乱跳根因）物理性消失。
     // v1.21 焦点乱跑根因修复（2026-09-06 仪器测试实证）：ACTION_UP 也必须一并消费——
@@ -69,15 +150,30 @@ class MainActivity : ComponentActivity() {
     // ComponentActivity 将该可覆写入口标记为 library-group restricted；应用必须在窗口
     // 分发层拦截完整 DPAD down/up 事件，避免 Compose 的第二套几何导航再次接管。
     @SuppressLint("RestrictedApi")
-    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                consumeBackKeyUp = false
+                if (ExitCoordinator.isExiting()) return true
+                if (AppRouteState.route == "live" && HomeBackState.isAtExitPoint) {
+                    return handleHomeBack()
+                } else {
+                    // 深层页面先用返回键回 Hero；这里不能启动退出倒计时。
+                    resetPendingBackExit()
+                }
+            } else if (event.action == KeyEvent.ACTION_UP && consumeBackKeyUp) {
+                consumeBackKeyUp = false
+                return true
+            }
+        }
+        if (event.action == KeyEvent.ACTION_DOWN) {
             val dir = com.qiubo.optimaltv.ui.components.navDirOf(event.keyCode)
             if (dir != null) {
                 return com.qiubo.optimaltv.ui.components.OtvNav.dispatch(
                     dir, event.repeatCount, (event.eventTime - event.downTime).coerceAtLeast(0),
                 )
             }
-        } else if (event.action == android.view.KeyEvent.ACTION_UP) {
+        } else if (event.action == KeyEvent.ACTION_UP) {
             if (com.qiubo.optimaltv.ui.components.navDirOf(event.keyCode) != null) {
                 return true
             }
@@ -88,7 +184,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.qiubo.optimaltv.OtvLog.i("activity onCreate")
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Compose 首页处理器不可用时仍提供双击退出，首按不把应用丢到后台。
+                if (ExitCoordinator.isExiting()) return
+                if (AppRouteState.route == "live") handleHomeBack()
+            }
+        })
         consumeDebugNav(intent)
+        consumeVoiceMatchIntent(intent)
         syncViewportMetrics()
         // TV 沉浸式：球迹直播使用完整 16:9 画布，系统栏不隐藏会把内容挤出屏幕
         window.decorView.systemUiVisibility = (
@@ -101,12 +205,20 @@ class MainActivity : ComponentActivity() {
             )
         setContent {
             QiuJiLiveTheme {
-                // 足球赛程页面就绪前渲染品牌启动屏。
-                val ready by AppStartup.ready.collectAsStateWithLifecycle()
-                // 热更新检查继续后台执行，但不能把首帧挡在启动屏。
-                if (ready) AppRoot() else StartupSplash()
+                Box(Modifier.fillMaxSize()) {
+                    // 足球赛程页面就绪前渲染品牌启动屏。
+                    val ready by AppStartup.ready.collectAsStateWithLifecycle()
+                    // 热更新检查继续后台执行，但不能把首帧挡在启动屏。
+                    if (ready) AppRoot() else StartupSplash()
+                    OtvHint(exitHint.value)
+                }
             }
         }
+    }
+
+    override fun onDestroy() {
+        mainHandler.removeCallbacks(clearExitHint)
+        super.onDestroy()
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
@@ -125,6 +237,16 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         consumeDebugNav(intent)
+        consumeVoiceMatchIntent(intent)
+    }
+
+    /** Voice helper entry: resolve a team name once the live schedule is ready. */
+    private fun consumeVoiceMatchIntent(intent: android.content.Intent?) {
+        val query = VoiceMatchIntents.readQuery(intent) ?: return
+        if (intent != null) VoiceMatchIntents.clear(intent)
+        if (VoiceMatchRequestBus.offer(query)) {
+            com.qiubo.optimaltv.OtvLog.i("voice-match（intent extra）query=$query")
+        }
     }
 
     /** 调试直达足球播放页：am start --es otvDebugMatchId "<id>"；仅测试注入用。 */
@@ -178,6 +300,20 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot() {
     val nav = rememberNavController()
 
+    // A voice request may arrive while the player is open. Return to the schedule first so its
+    // loaded match list can resolve and open the requested live picture.
+    LaunchedEffect(nav) {
+        VoiceMatchRequestBus.pending.collect { request ->
+            if (request == null) return@collect
+            if (nav.currentDestination?.route == "live") return@collect
+            nav.navigate("live") {
+                popUpTo("live") { inclusive = false }
+                launchSingleTop = true
+            }
+            com.qiubo.optimaltv.OtvLog.i("voice-match → schedule query=${request.query}")
+        }
+    }
+
     // 调试直达播放页：debug 广播 → pending 消费（详见 DebugNavBus；release 无写入方）
     LaunchedEffect(Unit) {
         if (!com.qiubo.optimaltv.BuildConfig.DEBUG) return@LaunchedEffect
@@ -202,6 +338,8 @@ private fun AppRoot() {
     // 需求 足球#3：路由变化落日志（黑屏发生在哪一页）
     androidx.compose.runtime.DisposableEffect(nav) {
         val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, dest, _ ->
+            AppRouteState.update(dest.route)
+            if (dest.route != "live") HomeBackState.update(false)
             com.qiubo.optimaltv.OtvLog.i("route → ${dest.route}")
         }
         nav.addOnDestinationChangedListener(listener)

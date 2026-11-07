@@ -11,11 +11,14 @@ class AndroidLifecycleContractTest(unittest.TestCase):
         for app in APPS:
             main = app / "src" / "main" / "java" / "com" / "qiubo" / "optimaltv"
             backend = (main / "BackendService.kt").read_text(encoding="utf-8")
-            hint = (main / "ui" / "components" / "Hint.kt").read_text(encoding="utf-8")
+            activity = (main / "MainActivity.kt").read_text(encoding="utf-8")
+            exit_coordinator = (main / "lifecycle" / "ExitCoordinator.kt").read_text(encoding="utf-8")
             self.assertIn("ACTION_SHUTDOWN", backend)
             self.assertIn("return START_NOT_STICKY", backend)
             self.assertNotIn("return START_STICKY", backend)
-            self.assertIn("ExitCoordinator.exit", hint)
+            self.assertIn("ExitCoordinator.exit(this)", activity)
+            self.assertIn("finishAndRemoveTask()", exit_coordinator)
+            self.assertIn("killProcess", exit_coordinator)
 
     def test_tv_signals_foreground_network_refresh(self):
         for app in APPS:
@@ -42,6 +45,15 @@ class AndroidLifecycleContractTest(unittest.TestCase):
             self.assertIn("hostPausedAtMs", source)
             self.assertIn("AppLifecyclePolicy.onForeground", source)
             self.assertIn("REFRESH_AND_RENEW_LIVE", source)
+
+    def test_live_back_handler_hands_the_top_level_back_key_to_activity(self):
+        for app in APPS:
+            live = (
+                app / "src" / "main" / "java" / "com" / "qiubo" / "optimaltv"
+                / "ui" / "live" / "LiveScreen.kt"
+            ).read_text(encoding="utf-8")
+            self.assertIn("LaunchedEffect(atTop) { HomeBackState.update(atTop) }", live)
+            self.assertIn("BackHandler(enabled = !atTop)", live)
 
 
 if __name__ == "__main__":
