@@ -756,21 +756,22 @@ def parse_matches(html):
 
 def _build_matches_payload(matches):
     """由比赛列表组装 /api/matches 响应体（build_api 与后台刷新共用）。"""
-    leagues = []
-    seen = {}
-    for m in matches:
-        if m["league"] not in seen:
-            seen[m["league"]] = m["league_color"]
-            leagues.append({"name": m["league"], "color": m["league_color"]})
     payload = {
         "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "source": _active_source["url"],
-        "count": len(matches),
-        "live_count": sum(1 for m in matches if m["status"] == "live"),
-        "leagues": leagues,
         "matches": matches,
     }
-    merge_7m_scores(payload)
+    score_table = merge_7m_scores(payload) or {}
+    payload["matches"] = _dedupe_fixtures(payload["matches"], score_table)
+    leagues = []
+    seen = {}
+    for m in payload["matches"]:
+        if m["league"] not in seen:
+            seen[m["league"]] = m["league_color"]
+            leagues.append({"name": m["league"], "color": m["league_color"]})
+    payload["count"] = len(payload["matches"])
+    payload["live_count"] = sum(1 for m in payload["matches"] if m["status"] == "live")
+    payload["leagues"] = leagues
     return _project_matches_payload(payload, strip_internal=False)
 
 
@@ -830,7 +831,11 @@ _7M_TEAM_ALIAS = {
     "巴黎圣日耳曼": "巴黎", "纽卡斯尔联": "纽卡",
     "西汉姆联": "西汉姆", "皇家社会": "皇社", "毕尔巴鄂竞技": "毕尔巴鄂",
     "莱比锡红牛": "红牛", "莱斯特城": "莱斯特",
+    "云达不莱梅": "不莱梅",
 }
+
+# 88zhibo 会把部分五大联赛比赛标成通用足球分类；7m 的联赛字段可补齐。
+_GENERIC_LEAGUE_LABELS = frozenset(("足球综合", "足球", "综合", "其他"))
 
 
 def _norm_team7m(n):
@@ -861,6 +866,60 @@ def _split7m_row(body):
     if buf.strip():
         out.append(buf.strip())
     return out
+
+
+def _7m_start_parts(rec):
+    """Return (date_full, HH:MM) from a 7m record, or None when malformed."""
+    try:
+        year, month, day, hour, minute = [
+            int(x) for x in str((rec or {}).get("start", "")).split(",")[:5]
+        ]
+        return "%04d-%02d-%02d" % (year, month, day), "%02d:%02d" % (hour, minute)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fixture_key(item):
+    """Stable dedupe key for the same fixture listed twice by the upstream page."""
+    home = re.sub(r"\s+", "", str(item.get("home") or ""))
+    away = re.sub(r"\s+", "", str(item.get("away") or ""))
+    date = str(item.get("date_full") or item.get("date") or "").strip()
+    return date, home, away
+
+
+def _dedupe_priority(item, score_table):
+    """Prefer the row matching 7m kickoff, then a live row, then the newest id."""
+    rec = score_table.get((_norm_team7m(item.get("home", "")),
+                           _norm_team7m(item.get("away", ""))))
+    start = _7m_start_parts(rec) if rec else None
+    exact_start = 1 if (
+        start
+        and str(item.get("date_full") or "").strip() == start[0]
+        and str(item.get("time") or "").strip() == start[1]
+    ) else 0
+    status_rank = {"live": 2, "upcoming": 1, "finished": 0}.get(
+        str(item.get("status") or "").strip().lower(), 0
+    )
+    try:
+        match_id = int(item.get("match_id") or 0)
+    except (TypeError, ValueError):
+        match_id = 0
+    return exact_start, status_rank, match_id
+
+
+def _dedupe_fixtures(matches, score_table=None):
+    """Collapse duplicate upstream rows while preserving first-seen order."""
+    score_table = score_table or {}
+    kept = {}
+    order = []
+    for item in matches:
+        key = _fixture_key(item)
+        if key not in kept:
+            kept[key] = item
+            order.append(key)
+        elif _dedupe_priority(item, score_table) > _dedupe_priority(kept[key], score_table):
+            kept[key] = item
+    return [kept[key] for key in order]
 
 
 def _fetch_7m_scores():
@@ -933,11 +992,11 @@ def merge_7m_scores(payload):
     try:
         table = _fetch_7m_scores()
         if not table:
-            return
+            return {}
         for m in payload.get("matches", []):
             key = (_norm_team7m(m["home"]), _norm_team7m(m["away"]))
             rec = table.get(key)
-            if not rec or rec.get("state") is None:
+            if not rec:
                 continue
             # 日期一致才合并（7m 数据跨多天，避免同名球队隔天比赛错配）
             if rec.get("start"):
@@ -951,6 +1010,12 @@ def merge_7m_scores(payload):
                         continue
                 except (ValueError, IndexError):
                     pass
+            # 88zhibo 对部分场次只给「足球综合」；7m 的联赛字段可恢复真实赛事，
+            # 否则客户端严格白名单会把曼城等五大联赛比赛误过滤掉。
+            if rec.get("league") and str(m.get("league") or "").strip() in _GENERIC_LEAGUE_LABELS:
+                m["league"] = rec["league"]
+            if rec.get("state") is None:
+                continue
             st = rec["state"]
             if st in _7M_STATE_VOID:
                 m["status"] = _7M_VOID_STATUS.get(st, "postponed")
@@ -973,8 +1038,9 @@ def merge_7m_scores(payload):
                 m["_status_authoritative"] = True
                 if score:
                     m["score"] = score
+        return table
     except Exception:
-        pass
+        return {}
 
 
 def _refresh_matches_bg():

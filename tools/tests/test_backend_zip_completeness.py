@@ -73,12 +73,8 @@ class BackendZipCompletenessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp) / "dist"
             result = build_assets(SRC / "www", output)
-            self.assertEqual(37, len(result.copied_files))
-            self.assertEqual(
-                {f"assets/football/fb-{index:02d}.jpg" for index in range(1, 37)}
-                | {"assets/logo.png"},
-                set(result.copied_files),
-            )
+            self.assertEqual(1, len(result.copied_files))
+            self.assertEqual({"assets/logo.png"}, set(result.copied_files))
             for retired in (
                 "index.html",
                 "app.js",
@@ -102,7 +98,7 @@ class BackendZipCompletenessTests(unittest.TestCase):
                 if name == "www/manifest.json" or name.startswith("www/assets/")
             }
             self.assertEqual(set(entries), allowed_runtime | allowed_static)
-            self.assertEqual(36, sum(
+            self.assertEqual(0, sum(
                 1 for name in entries if name.startswith("www/assets/football/fb-")
             ))
             self.assertIn("www/assets/logo.png", entries)

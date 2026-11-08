@@ -1,7 +1,7 @@
 """Rebuild the embedded TV backend and its native-only assets.
 
-The archive contains the live Python runtime plus the football artwork and
-logo used by the native TV client. The retired standalone Web UI is never
+The archive contains the live Python runtime plus the team logo used by the
+native TV client. The retired standalone Web UI is never
 packaged: no HTML, application JavaScript, stylesheet, Web manifest or hashed
 Web bundle belongs in this archive.
 

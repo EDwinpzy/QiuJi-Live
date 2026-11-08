@@ -24,11 +24,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -125,6 +127,7 @@ class LiveViewModel : ViewModel() {
     @Volatile private var refreshing = false
     private val matchStartCache = mutableMapOf<String, Long>()
     private var matchStartCacheDay = Long.MIN_VALUE
+    private var lastProjectedMinute = Long.MIN_VALUE
 
     init {
         // v1.10（2026-08-31 低端机秒开）：先恢复磁盘快照立即上屏——冷启动链路
@@ -158,7 +161,6 @@ class LiveViewModel : ViewModel() {
                 val matches = Graph.live.matches(force = forceLocal, fresh = fresh)
                 val leagues = matches.map { it.league }.filter { it.isNotBlank() }.distinct()
                 com.qiubo.optimaltv.OtvLog.i("matches 加载成功 ${matches.size} 场")
-                matchStartCache.clear()
                 _ui.value = LiveUiState(
                     loading = false,
                     matches = matches,
@@ -166,6 +168,8 @@ class LiveViewModel : ViewModel() {
                     refreshFinished = true,
                     freshData = true,
                 )
+                // New server data should be projected once on the next tick.
+                lastProjectedMinute = Long.MIN_VALUE
             } catch (e: Exception) {
                 com.qiubo.optimaltv.OtvLog.e("matches 加载失败: ${e.message}")
                 // 初次请求即使由静默轮询触发，空页面也要结束 loading 并显示错误；已有数据则保留。
@@ -185,6 +189,11 @@ class LiveViewModel : ViewModel() {
     }
 
     fun projectClock(nowMillis: Long = System.currentTimeMillis()) {
+        // Minute-level labels only need one projection per minute; waking every
+        // few seconds must not re-parse 30+ kickoff timestamps on the main thread.
+        val minute = nowMillis / 60_000L
+        if (minute == lastProjectedMinute) return
+        lastProjectedMinute = minute
         val current = _ui.value
         val projected = current.matches.map { MatchClockPolicy.project(it, cachedMatchStartMillis(it, nowMillis), nowMillis) }
         if (projected != current.matches) _ui.value = current.copy(matches = projected)
@@ -247,7 +256,7 @@ private const val LIVE_BAND = 640f
 /** TV 首页横向栅格：1920 画布内严格四等列，避免分页时露出下一组卡片。 */
 internal object TvLiveLayout {
     const val CanvasWidth = 1920f
-    const val HorizontalInset = 70f
+    const val HorizontalInset = 84f
     const val CardGap = 24f
     const val Columns = 4
     const val CardWidth = (CanvasWidth - HorizontalInset * 2 - CardGap * (Columns - 1)) / Columns
@@ -281,7 +290,7 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
         LEAGUE_FILTERS.associate { (key, _) -> key to FocusRequester() }
     }
     val backScope = androidx.compose.runtime.rememberCoroutineScope()
-    val heroFocused = remember { mutableStateOf(false) }
+    val heroFocused = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     val retryFocus = remember { FocusRequester() }
     val visibleMatches = remember(ui.matches, leagueFilter) {
         visibleLiveScheduleMatches(ui.matches, leagueFilter)
@@ -302,7 +311,7 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
     val firstVisibleMatchId = groups.values.firstOrNull { it.isNotEmpty() }?.firstOrNull()?.matchId
     val firstCardFocus = firstVisibleMatchId?.let { cardReg.fr(it) }
     val firstCardRowItemIndex = remember(groups) {
-        var index = 2 // hero + league filters
+        var index = 1 // immersive hero (filters live inside the hero)
         var found = false
         for (matches in groups.values) {
             index += 2 // date header + empty-row placeholder
@@ -317,9 +326,15 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
     // hero 状态：仅手动左右键切换；按 matchId 记忆（列表刷新重排时海报不再自动换比赛，需求 #11）
     var heroId by rememberSaveable { mutableStateOf<String?>(null) }
     val heroes = remember(ui.matches) { vm.heroList(ui.matches) }
+    val heroesPresent = rememberUpdatedState(heroes.isNotEmpty())
+    val backEnabled = remember {
+        derivedStateOf { !atTop || (heroesPresent.value && !heroFocused.get()) }
+    }
     val heroIdx = heroes.indexOfFirst { it.matchId == heroId }.takeIf { it >= 0 } ?: 0
     val heroBtnFocus = remember { FocusRequester() }
-    LaunchedEffect(atTop) { HomeBackState.update(atTop) }
+    LaunchedEffect(atTop, heroes.isEmpty()) {
+        HomeBackState.update(atTop && (heroes.isEmpty() || heroFocused.get()))
+    }
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose { HomeBackState.update(false) }
     }
@@ -344,7 +359,7 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
         val requester = filterFocusRequesters[leagueFilter] ?: return false
         repeat(20) { attempt ->
             if (runCatching { requester.requestFocus() }.isSuccess) return true
-            if (attempt == 0) listState.scrollToItem(1)
+            if (attempt == 0) listState.scrollToItem(0)
             delay(50)
         }
         return false
@@ -366,10 +381,11 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
         }
     }
 
-    // 页面前台每秒检查刷新条件；成功或失败后约 10 秒再拉取，离开本页自动停止。
+    // 页面前台每 5 秒检查刷新与时钟投影；分钟级展示无需每秒重算整页数据。
+    // 成功或失败后约 10 秒再拉取，离开本页自动停止。
     LaunchedEffect(Unit) {
         while (true) {
-            delay(1_000)
+            delay(5_000)
             vm.projectClock()
             vm.refreshIfStale()
         }
@@ -396,6 +412,8 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
         }
         nav.navigate("player/" + URLEncoder.encode(m.matchId, "UTF-8"))
     }
+    // 本地函数引用每次重组都会新建实例，会让整列比赛卡失去可跳过性。
+    val stableOnPlay: (MatchItem) -> Unit = remember { { m -> playMatch(m) } }
 
     // Voice commands must land on the live picture itself. A scheduled or finished fixture is not
     // treated as a success; the user gets a status hint instead of a fake player screen.
@@ -463,10 +481,11 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
 
     // 只在需要从列表深处回到 Hero 时消费返回键；Hero 顶层交回 Activity，
     // 否则 Compose BackHandler 会把双击退出的按键一起吞掉。
-    BackHandler(enabled = !atTop) {
+    // backEnabled 在独立子组合里读取：Hero 焦点变化不再让整页重组。
+    LiveBackHandler(backEnabled = backEnabled) {
         when {
             // 卡片等深层内容 BACK → 返回 hero；hero BACK → 双击退出。
-            heroes.isNotEmpty() && (!atTop || !heroFocused.value) -> backScope.launch {
+            heroes.isNotEmpty() && (!atTop || !heroFocused.get()) -> backScope.launch {
                 listState.scrollToItem(0)
                 repeat(10) {
                     if (runCatching { heroBtnFocus.requestFocus() }.isSuccess) return@launch
@@ -482,7 +501,7 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(OtvColors.Bg)) {
+    Box(Modifier.fillMaxSize().background(Color(0xFF05060B))) {
         when {
             // 规范加载态：居中 brand 色 3 点呼吸 + caption
             ui.loading && ui.matches.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -507,6 +526,7 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
                 }
             }
             else -> {
+                HomeBackdrop()
                 // 数据就绪后找回上次聚焦的比赛卡；找不回则落到首屏主操作。
                 LaunchedEffect(ui.matches) {
                     val key = returnKey ?: return@LaunchedEffect
@@ -532,40 +552,36 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(OtvColors.Bg),
+                        .fillMaxSize(),
                 ) {
                     item(key = "hero") {
-                        LiveHeroBand(
+                        HomeHeroBand(
                             hero = heroes.getOrNull(heroIdx),
                             heroes = heroes,
-                            heroIdx = heroIdx,
                             s = s,
                             heroBtnFocus = heroBtnFocus,
                             backScope = backScope,
-                            onHeroFocused = { heroFocused.value = it },
+                            selectedFilter = leagueFilter,
+                            onSelectFilter = { key ->
+                                if (leagueFilter != key) {
+                                    leagueFilter = key
+                                    if (!atTop) backScope.launch { listState.animateScrollToItem(0) }
+                                }
+                            },
+                            filterFocusRequesters = filterFocusRequesters,
+                            onHeroFocused = { focused ->
+                                heroFocused.set(focused)
+                                HomeBackState.update(atTop && (heroes.isEmpty() || focused))
+                            },
                             listState = listState,
                             onFocusFilters = { backScope.launch { focusLeagueFilters() } },
-                            onPlay = ::playMatch,
+                            onPlay = stableOnPlay,
                             onPrev = {
                                 if (heroes.isNotEmpty()) heroId = heroes[(heroIdx - 1 + heroes.size) % heroes.size].matchId
                             },
                             onNext = {
                                 if (heroes.isNotEmpty()) heroId = heroes[(heroIdx + 1) % heroes.size].matchId
                             },
-                        )
-                    }
-                    item(key = "filters") {
-                        LeagueFilterBar(
-                            selected = leagueFilter,
-                            onSelect = { key ->
-                                if (leagueFilter != key) {
-                                    leagueFilter = key
-                                    backScope.launch { listState.animateScrollToItem(1) }
-                                }
-                            },
-                            s = s,
-                            focusRequesters = filterFocusRequesters,
                         )
                     }
                     // 比赛分组结果见 LazyColumn 外的 groups（v1.19 提级 remember）
@@ -578,17 +594,17 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.padding(
                                     start = TvLiveLayout.HorizontalInset.sx(s),
-                                    top = 32f.sx(s),
-                                    bottom = 20f.sx(s),
+                                    top = 22f.sx(s),
+                                    bottom = 14f.sx(s),
                                 ),
                             ) {
                                 Box(
                                     Modifier
-                                        .size(10f.sx(s))
+                                        .size(16f.sx(s))
                                         .background(OtvColors.AccentGreen, CircleShape),
                                 )
-                                Spacer(Modifier.width(16f.sx(s)))
-                                Text(dateLabel(date), color = OtvColors.TextPrimary, fontSize = 22f.sxs(s), fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.width(18f.sx(s)))
+                                Text(dateLabel(date), color = OtvColors.TextPrimary, fontSize = 28f.sxs(s), fontWeight = FontWeight.SemiBold)
                             }
                         }
                         item(key = "row-$date-h") {
@@ -602,35 +618,21 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
                             }
                         }
                         if (ms.isNotEmpty() && isFirstGroup) {
-                            // 需求⑦：今日比赛横排展示；2026-09-05 需求④：卡片超一屏宽时
-                            // 折两行（均分，行序保持时间顺序），未超出才单行——两行仍超宽
-                            // 时整体横向滚动。放大卡片后仍保持一屏四列，并收紧左右安全边距。
-                            // 每行独立 LazyRow+ProvideNavScrolls（行内滚动互不干扰，几何导航跨行照常）。
-                            // 横向留白用 contentPadding（需求 足球#1）：选中环行首/行尾不裁剪。
+                            // 首页今日赛程固定单行；更多比赛通过横向移动查看，不再露出第二行残卡。
                             item(key = "row-$date") {
-                                val pages = TodayMatchPager.pages(ms)
-                                val pageState = rememberLazyListState()
-                                val pageScroll = remember(pageState) { lazyNavContainer(pageState) }
-                                ProvideNavScrolls(horizontal = pageScroll) {
+                                val rowState = rememberLazyListState()
+                                val rowScroll = remember(rowState) { lazyNavContainer(rowState) }
+                                ProvideNavScrolls(horizontal = rowScroll) {
                                     LazyRow(
-                                        state = pageState,
-                                        contentPadding = PaddingValues(horizontal = TvLiveLayout.HorizontalInset.sx(s)),
+                                        state = rowState,
+                                        contentPadding = PaddingValues(start = TvLiveLayout.HorizontalInset.sx(s)),
                                         horizontalArrangement = Arrangement.spacedBy(TvLiveLayout.CardGap.sx(s)),
-                                        modifier = Modifier.padding(top = 20f.sx(s), bottom = 32f.sx(s)),
+                                        modifier = Modifier
+                                            .width(TvLiveLayout.TodayPageWidth.sx(s))
+                                            .padding(top = 14f.sx(s), bottom = 28f.sx(s)),
                                     ) {
-                                        items(pages.size, key = { "today-page-$date-$it" }) { pi ->
-                                            Column(
-                                                modifier = Modifier.width(TvLiveLayout.TodayPageWidth.sx(s)),
-                                                verticalArrangement = Arrangement.spacedBy(32f.sx(s)),
-                                            ) {
-                                                pages[pi].rows.forEach { row ->
-                                                    Row(horizontalArrangement = Arrangement.spacedBy(TvLiveLayout.CardGap.sx(s))) {
-                                                        row.forEach { match ->
-                                                            GameCard(match, s, ::playMatch, cardReg = cardReg)
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                        items(ms.size, key = { index -> "today-${ms[index].matchId}" }) { index ->
+                                            HomeMatchCard(ms[index], s, stableOnPlay, cardReg = cardReg)
                                         }
                                     }
                                 }
@@ -645,11 +647,11 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
                                     Row(
                                         horizontalArrangement = Arrangement.spacedBy(TvLiveLayout.CardGap.sx(s)),
                                         modifier = Modifier
-                                            .padding(top = if (ri == 0) 20f.sx(s) else 28f.sx(s))
+                                            .padding(top = if (ri == 0) 14f.sx(s) else 24f.sx(s))
                                             .padding(horizontal = TvLiveLayout.HorizontalInset.sx(s)),
                                     ) {
                                         rowMs.forEach { m ->
-                                            GameCard(m, s, ::playMatch, cardReg = cardReg)
+                                            HomeMatchCard(m, s, stableOnPlay, cardReg = cardReg)
                                         }
                                     }
                                 }
@@ -663,6 +665,14 @@ fun LiveScreen(nav: NavController, vm: LiveViewModel = viewModel()) {
         }
         OtvHint(hint)
     }
+}
+
+@Composable
+private fun LiveBackHandler(
+    backEnabled: State<Boolean>,
+    onBack: () -> Unit,
+) {
+    BackHandler(enabled = backEnabled.value, onBack = onBack)
 }
 
 /**
@@ -745,28 +755,8 @@ private fun LiveHeroBand(
     onPrev: () -> Unit,
     onNext: () -> Unit,
 ) {
-    val posterIdx = Graph.live.launchPosterIndex
-    val heroCtx = androidx.compose.ui.platform.LocalContext.current
     Box(Modifier.fillMaxWidth().height(LIVE_BAND.sx(s))) {
-        AsyncImage(
-            // v1.10：全局放开硬件位图后，仅 hero 大图按请求走软件解码
-            // （超宽海报在个别 GPU 硬件位图解码失败 = 图空白，v1.4 实测）
-            model = remember(heroCtx, posterIdx) {
-                coil.request.ImageRequest.Builder(heroCtx)
-                    .data(Graph.live.posterUrl(posterIdx))
-                    .allowHardware(false)
-                    .build()
-            },
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            // 需求 足球#3：海报加载失败落日志（黑屏观感可能是海报没出+背景全黑）
-            onState = { st ->
-                if (st is coil.compose.AsyncImagePainter.State.Error) {
-                    com.qiubo.optimaltv.OtvLog.w("live hero poster 加载失败: ${st.result.throwable?.message}")
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+        HeroPosterCarousel(s)
         // 半透明白雾
         Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.10f)))
         // 左侧压暗（保证比分文字可读）

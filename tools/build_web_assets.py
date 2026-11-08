@@ -1,7 +1,7 @@
 """Stage deterministic assets required by the TV client.
 
 This is intentionally not a Web application build. The native TV client fetches
-only the football artwork and logo through their embedded backend; standalone
+only its team logo through the embedded backend; standalone
 HTML, JavaScript, CSS, service-worker manifest and hashed Web bundles must not
 be produced or copied.
 """
@@ -17,7 +17,6 @@ from typing import Any
 
 
 IMAGE_CACHE_CONTROL = "public, max-age=86400"
-REQUIRED_FOOTBALL_POSTERS = tuple(f"fb-{index:02d}.jpg" for index in range(1, 37))
 _LEGACY_WEB_ROOT_FILES = (
     "index.html",
     "app.js",
@@ -59,16 +58,8 @@ def build_assets(source_dir: str | Path, output_dir: str | Path) -> BuildResult:
         raise ValueError("source_dir and output_dir must not overlap")
 
     assets_root = source / "assets"
-    football_root = assets_root / "football"
     if not assets_root.is_dir():
         raise FileNotFoundError(f"missing native asset directory: {assets_root}")
-    missing_posters = [
-        name for name in REQUIRED_FOOTBALL_POSTERS if not (football_root / name).is_file()
-    ]
-    if missing_posters:
-        raise FileNotFoundError(
-            "missing football posters: " + ", ".join(missing_posters)
-        )
 
     output.mkdir(parents=True, exist_ok=True)
     _remove_legacy_web_output(output)

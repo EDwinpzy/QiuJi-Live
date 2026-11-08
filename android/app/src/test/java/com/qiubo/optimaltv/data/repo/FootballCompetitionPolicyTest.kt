@@ -70,6 +70,26 @@ class FootballCompetitionPolicyTest {
         assertFalse(eligible("欧协联", "皇家马德里", "拜仁"))
     }
 
+    @Test
+    fun keepsGenericLeagueWhenBothTeamsAreKnownTopFiveClubs() {
+        val top5 = setOf("诺丁汉森林", "曼城", "斯图加特", "不莱梅", "洛杉矶银河")
+        assertTrue(
+            LiveRepository.isStrictFootballMatch(
+                "足球综合", "诺丁汉森林", "曼城", nationalTeams, top5,
+            ),
+        )
+        assertTrue(
+            LiveRepository.isStrictFootballMatch(
+                "足球综合", "斯图加特", "不莱梅", nationalTeams, top5,
+            ),
+        )
+        assertFalse(
+            LiveRepository.isStrictFootballMatch(
+                "足球综合", "曼城", "未知球队", nationalTeams, top5,
+            ),
+        )
+    }
+
     private fun eligible(league: String, home: String, away: String): Boolean =
         LiveRepository.isStrictFootballMatch(league, home, away, nationalTeams)
 }

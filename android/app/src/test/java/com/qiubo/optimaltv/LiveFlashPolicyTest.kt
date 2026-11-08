@@ -26,7 +26,7 @@ class LiveFlashPolicyTest {
     }
 
     @Test fun tvGridFitsExactlyFourCardsAcrossTheCanvas() {
-        assertEquals(427f, TvLiveLayout.CardWidth)
+        assertEquals(420f, TvLiveLayout.CardWidth)
         assertEquals(
             TvLiveLayout.CanvasWidth,
             TvLiveLayout.HorizontalInset * 2 +

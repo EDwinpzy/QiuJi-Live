@@ -42,6 +42,17 @@ class LiveRepository(
                 ?: throw IllegalStateException("赛程接口未返回比赛列表")
         }
 
+        /** 后端比分字段是 home/away；旧快照/旧接口曾用 h/a，两者都兼容。 */
+        internal fun scoreText(score: JSONObject?, vararg keys: String): String {
+            if (score == null) return ""
+            for (key in keys) {
+                if (score.isNull(key)) continue
+                val value = score.optString(key).takeUnless { it == "null" }?.trim().orEmpty()
+                if (value.isNotEmpty()) return value
+            }
+            return ""
+        }
+
         private const val TAG = "OTV"
         private val TEAM_SPACE_RE = Regex("\\s+")
         private val TEAM_COMPETITION_PREFIX_RE = Regex(
@@ -51,9 +62,6 @@ class LiveRepository(
             "^(英超|西甲|意甲|德甲|法甲|中超|欧冠|欧联|欧协|欧国联|世预赛|亚冠)[\\s\\S]{0,6}?(?=[^\\x00-\\x7F])",
         )
         private val TEAM_BASE_SUFFIX_RE = Regex("(女篮|男篮|女足|男足|B队|二队|U\\d+|青年队)$")
-
-        /** 足球 hero 海报池大小（2026-08-29 换新海报：tools/build_backend_zip.py 写入 fb-01..36.jpg） */
-        const val POSTER_POOL = 36
 
         /** 原版 hero 重要度：live+1000 / 有比分+100 / 五大联赛+50 / 欧战与国赛+40。 */
         private val TOP_LEAGUE_RE = Regex("^(英超|西甲|意甲|德甲|法甲)")
@@ -83,6 +91,8 @@ class LiveRepository(
             "(?:国家男子足球队|国家足球队|男子足球队|国家男子队|男子国家队|" +
                 "足球队|国家队|男足队|男子队|男足|男队|队)$",
         )
+        /** 上游偶尔只给通用足球分类；双方都在五大联赛球队表时仍可保留。 */
+        private val GENERIC_LEAGUE_LABELS = setOf("足球综合", "足球", "综合", "其他")
         /** 国足没有对手白名单限制：中国成年男足对任意成年国家队都保留。 */
         private const val CHINA_NATIONAL_TEAM = "中国"
 
@@ -96,6 +106,7 @@ class LiveRepository(
             home: String,
             away: String,
             nationalTeams: Set<String>,
+            top5Teams: Set<String> = emptySet(),
         ): Boolean {
             val l = league.trim()
             val h = home.trim()
@@ -111,6 +122,7 @@ class LiveRepository(
             ) return false
             if (TOP_LEAGUE_RE.containsMatchIn(l)) return true
             if (EURO_CLUB_CUP_RE.containsMatchIn(l)) return true
+            if (l in GENERIC_LEAGUE_LABELS && h in top5Teams && a in top5Teams) return true
             val homeTeam = normalizeNationalTeamName(h)
             val awayTeam = normalizeNationalTeamName(a)
             if (
@@ -204,8 +216,8 @@ class LiveRepository(
         }
     }
 
-    /** baseUrl 内存缓存（v1.19 流畅度）：UI 组合期 teamIconUrl/posterUrl 高频调用
-     *  （足球页每张比赛卡 2 次队标 + hero 海报），旧版每次 runBlocking 读 DataStore
+    /** baseUrl 内存缓存（v1.19 流畅度）：UI 组合期 teamIconUrl 高频调用
+     *  （足球页每张比赛卡 2 次队标），旧版每次 runBlocking 读 DataStore
      *  ——主线程组合期几十次阻塞等待，光标移动一顿一顿的直接来源。
      *  后台收集 DataStore flow：首发射加载 + 设置页变更即时刷新，语义与旧版一致。 */
     @Volatile private var cachedBase: String = "http://127.0.0.1:8090"
@@ -248,6 +260,7 @@ class LiveRepository(
 
     /** 严格赛事过滤表：只读取主流成年国家队集合，避免旧杯赛关键词继续扩大范围。 */
     private data class FootballFilters(
+        val top5: Set<String>,
         val national: Set<String>,
     )
 
@@ -258,14 +271,15 @@ class LiveRepository(
                 o.optJSONArray(k)?.let { a -> for (i in 0 until a.length()) add(a.getString(i)) }
             }
             FootballFilters(
+                arr("TOP5_TEAMS"),
                 arr("NATIONAL_TEAMS").mapTo(linkedSetOf()) { normalizeNationalTeamName(it) },
             )
-        }.getOrDefault(FootballFilters(emptySet()))
+        }.getOrDefault(FootballFilters(emptySet(), emptySet()))
     }
 
     /** 严格赛事判定：五大联赛、欧冠/欧联、主流成年国家队对阵，或国足比赛。 */
     fun isMainstreamMatch(m: MatchItem): Boolean =
-        isStrictFootballMatch(m.league, m.home, m.away, filters.national)
+        isStrictFootballMatch(m.league, m.home, m.away, filters.national, filters.top5)
 
     private fun todayTomorrowKeys(): Pair<String, String> {
         val zone = java.util.TimeZone.getTimeZone("Asia/Shanghai")
@@ -289,8 +303,6 @@ class LiveRepository(
         val list = (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
             val sc = o.optJSONObject("score")
-            fun sc2(k: String): String =
-                if (sc == null || sc.isNull(k)) "" else sc.optString(k).takeUnless { it == "null" } ?: ""
             // 列表频道只作目录元信息；播放页从 /api/stream?src=all 获取已探活线路。
             val chArr = o.optJSONArray("channels")
             val channels = (0 until (chArr?.length() ?: 0)).mapNotNull channel@ { ci ->
@@ -311,8 +323,8 @@ class LiveRepository(
                 time = os(o, "time"),
                 status = os(o, "status"),
                 minute = os(o, "minute"),
-                homeScore = sc2("h"),
-                awayScore = sc2("a"),
+                homeScore = scoreText(sc, "home", "h"),
+                awayScore = scoreText(sc, "away", "a"),
                 channels = channels,
             )
         }.filter {
@@ -517,13 +529,5 @@ class LiveRepository(
     /** 别名兜底：去常见后缀再查一次 */
     private fun baseTeamName(n: String): String =
         n.replace(TEAM_BASE_SUFFIX_RE, "")
-
-    /** 足球海报池（2026-08-29 换新海报 36 张 jpg，经后端静态托管） */
-    fun posterUrl(index: Int): String =
-        baseUrl() + "/assets/football/fb-" + String.format(java.util.Locale.ROOT, "%02d", (index % POSTER_POOL) + 1) + ".jpg"
-
-    /** 启动海报索引（需求 足球#2）：进程内随机一次固定——hero 左右切比赛海报不换，
-     *  仅每次启动 app 时换一张（旧版按 matchId 散列，切比赛海报跟着换，用户不要） */
-    val launchPosterIndex: Int = kotlin.random.Random.nextInt(POSTER_POOL)
 
 }
