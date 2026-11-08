@@ -93,6 +93,62 @@ class ZhiBo88LiveTest(unittest.TestCase):
             [channel["name"] for channel in matches[0]["channels"]],
         )
 
+    def test_duplicate_rows_collapse_and_generic_league_is_filled_from_7m(self):
+        page = '''
+        <li class="live-list-group-time">2026-11-08</li>
+        <li class="group-game-item" data-id="128508">
+          <span class="game-type">法甲联赛 第10轮</span>
+          <span class="team-name">欧塞尔</span><span class="team-name">巴黎FC</span>
+          <span class="category-game-time">00:15</span><a href="/live/128508/play">暂无</a>
+        </li>
+        <li class="group-game-item" data-id="130975">
+          <span class="game-type">法甲</span>
+          <span class="team-name">欧塞尔</span><span class="team-name">巴黎FC</span>
+          <span class="category-game-time">02:00</span><a href="/live/130975/play">直播中</a>
+        </li>
+        <li class="group-game-item" data-id="129499">
+          <span class="game-type">足球综合</span>
+          <span class="team-name">诺丁汉森林</span><span class="team-name">曼城</span>
+          <span class="category-game-time">01:30</span><a href="/live/129499/play">直播中</a>
+        </li>
+        <li class="group-game-item" data-id="128509">
+          <span class="game-type">法甲联赛 第10轮</span>
+          <span class="team-name">巴黎圣日耳曼</span><span class="team-name">特鲁瓦</span>
+          <span class="category-game-time">03:45</span><a href="/live/128509/play">暂无</a>
+        </li>
+        <li class="group-game-item" data-id="130976">
+          <span class="game-type">法甲联赛 第10轮</span>
+          <span class="team-name">巴黎圣日耳曼</span><span class="team-name">特鲁瓦</span>
+          <span class="category-game-time">04:05</span><a href="/live/130976/play">暂无</a>
+        </li>
+        '''
+        score_table = {
+            ("欧塞尔", "巴黎FC"): {
+                "league": "法甲", "state": 1, "hs": "0", "as": "0",
+                "start": "2026,11,08,02,00,0", "_id": "5073617",
+            },
+            ("诺丁汉森林", "曼城"): {
+                "league": "英超", "state": 1, "hs": "2", "as": "0",
+                "start": "2026,11,08,01,30,0", "_id": "5081882",
+            },
+            ("巴黎", "特鲁瓦"): {
+                "league": "法甲", "state": 17, "hs": "0", "as": "0",
+                "start": "2026,11,08,04,05,0", "_id": "5073621",
+            },
+        }
+
+        with mock.patch.object(proxy, "_now_cn", return_value=datetime(2026, 11, 8, 2, 5)), \
+                mock.patch.object(proxy, "_fetch_7m_scores", return_value=score_table):
+            payload = proxy._build_matches_payload(proxy.parse_matches(page))
+
+        by_teams = {(m["home"], m["away"]): m for m in payload["matches"]}
+        self.assertEqual(3, payload["count"])
+        self.assertEqual("130975", by_teams[("欧塞尔", "巴黎FC")]["match_id"])
+        self.assertEqual("法甲", by_teams[("欧塞尔", "巴黎FC")]["league"])
+        self.assertEqual("英超", by_teams[("诺丁汉森林", "曼城")]["league"])
+        self.assertEqual("130976", by_teams[("巴黎圣日耳曼", "特鲁瓦")]["match_id"])
+        self.assertIn("英超", [league["name"] for league in payload["leagues"]])
+
     def test_source_labels_keep_postponed_and_cancelled_matches_out_of_clock_projection(self):
         page = '''
         <li class="live-list-group-time">2026-10-11</li>

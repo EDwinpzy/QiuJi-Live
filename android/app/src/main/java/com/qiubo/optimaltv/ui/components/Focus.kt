@@ -41,6 +41,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.focused as semanticsFocused
+import androidx.compose.ui.semantics.onClick as semanticsOnClick
+import androidx.compose.ui.semantics.requestFocus as semanticsRequestFocus
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import android.util.Log
@@ -260,9 +265,12 @@ fun Modifier.dpadFocusable(
     navGroup: String? = null,
     /** 节点级方向语义覆盖：返回 true = 已处理（消费），false = 落回几何搜索 */
     navOverride: ((Int) -> Boolean)? = null,
+    /** 非空 = 点击根节点自身的无障碍描述；同时合并子节点语义，降低 TV 语音助手遍历成本。 */
+    contentDescription: String? = null,
     onClick: () -> Unit,
 ): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
+    val clickHandler = onClick
     // 视觉态只供 draw 阶段读取；导航/布局热路径使用 AtomicBoolean，避免焦点变化
     // 把布局回调和筛选文字卷进重组与 measureAndLayout。
     val focusVisual = remember { mutableStateOf(false) }
@@ -395,6 +403,27 @@ fun Modifier.dpadFocusable(
             }
         }
         .focusRequester(bandNode.requester)
+        // Semantics must wrap clickable, not sit inside it: a later semantics
+        // modifier creates a child node, so the clickable root stays undescribed
+        // and the accessibility tree keeps an extra full-size duplicate node.
+        .then(
+            if (contentDescription != null) {
+                Modifier.clearAndSetSemantics {
+                    this.contentDescription = contentDescription
+                    semanticsFocused = focusVisual.value
+                    semanticsRequestFocus {
+                        bandNode.requester.requestFocus()
+                        true
+                    }
+                    semanticsOnClick {
+                        clickHandler()
+                        true
+                    }
+                }
+            } else {
+                Modifier
+            },
+        )
         // clickable already owns the single focus target. Adding focusable here creates
         // a second target: DPAD_CENTER can move focus to it, leaving OtvNav's ring/state
         // on the outer node and making the page appear frozen after a non-navigation click.

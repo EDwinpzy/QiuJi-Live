@@ -52,8 +52,12 @@ class AndroidLifecycleContractTest(unittest.TestCase):
                 app / "src" / "main" / "java" / "com" / "qiubo" / "optimaltv"
                 / "ui" / "live" / "LiveScreen.kt"
             ).read_text(encoding="utf-8")
-            self.assertIn("LaunchedEffect(atTop) { HomeBackState.update(atTop) }", live)
-            self.assertIn("BackHandler(enabled = !atTop)", live)
+            self.assertIn(
+                "HomeBackState.update(atTop && (heroes.isEmpty() || heroFocused.get()))",
+                live,
+            )
+            self.assertIn("LiveBackHandler(backEnabled = backEnabled)", live)
+            self.assertIn("BackHandler(enabled = backEnabled.value, onBack = onBack)", live)
 
 
 if __name__ == "__main__":
