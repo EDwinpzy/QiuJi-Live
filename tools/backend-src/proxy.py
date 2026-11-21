@@ -4,7 +4,7 @@
 球迹直播 数据代理服务器
 - 足球比赛列表、线路发现与直播播放中继
 - 足球队徽、网页静态资源与 APK 更新清单
-- GET /api/matches : 抓取 88zhibo.tv → 解析为 JSON（缓存 60s）
+- GET /api/matches : 抓取直播源站首页 → 解析为 JSON（缓存 60s）
 - GET /api/health  : 健康检查
 用法: python proxy.py [port]   (默认 8090)
 """
@@ -40,7 +40,7 @@ try:
 except ImportError:
     HAS_URLLIB3 = False
 
-SOURCE_URL = "https://www.88zhibo.tv/"
+SOURCE_URL = "https://www.88kanqiu.cx/"
 _VLC_HLS_SESSION = contextvars.ContextVar("otv_vlc_hls_session", default=None)
 WWW_ROOT = Path(__file__).parent / "www"
 
@@ -163,7 +163,12 @@ def _web_static_root() -> Path:
         return Path(override)
     return WWW_ROOT
 # 球迹直播列表源。88zhibo 首页同时混排篮球，parse_matches 会过滤非足球赛事。
-SOURCE_MIRRORS = [SOURCE_URL]
+# 2026-11-21：旧 www.88zhibo.tv 已 NXDOMAIN；主站与两个备用站结构和比赛 ID 一致。
+SOURCE_MIRRORS = [
+    SOURCE_URL,
+    "https://www.88kanqiu.ooo/",
+    "https://www.88zhibo.me/",
+]
 _active_source = {"i": 0, "url": SOURCE_MIRRORS[0]}
 # APK 应用内更新清单由后台写入 CloudBase 公开桶；网页函数只负责以稳定的
 # /web/apk-update/tv.json 地址代理它，避免每次发 APK 都重新部署网页函数。
@@ -303,13 +308,21 @@ _STATIC_CONTENT_HASH_RE = re.compile(r"(?:^|[/._-])[0-9a-f]{8,64}(?=$|[/._-])", 
 
 
 
+def _source_base(url=None):
+    value = str(url or _active_source["url"]).strip()
+    parsed = urlsplit(value)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("invalid source url")
+    return "%s://%s/" % (parsed.scheme, parsed.netloc)
+
+
 def fetch_source():
-    """抓取 m.html 原页面（镜像回退：主源失败自动切换 5cj.tv 等）"""
+    """抓取直播源首页；从上次成功镜像开始，单域名失败时自动切换备用站。"""
     last = None
     for k in range(len(SOURCE_MIRRORS)):
         i = (_active_source["i"] + k) % len(SOURCE_MIRRORS)
         url = SOURCE_MIRRORS[i]
-        host = url.rsplit("/", 1)[0] + "/"
+        host = _source_base(url)
         try:
             req = urlreq.Request(url, headers={
                 "User-Agent": UA,
@@ -1454,12 +1467,23 @@ def _88z_source_links(match_id, fresh=False):
         hit = _88z_source_links_cache.get(key)
         if hit and now - hit[0] < _88Z_SOURCE_LINKS_TTL:
             return hit[1]
-    endpoint = "https://www.88zhibo.tv/live/%s/source" % match_id
-    raw = fetch_url(endpoint, referer=SOURCE_URL, timeout=20)
-    links = _decode_88zhibo_source_links(raw)
-    _trim_cache(_88z_source_links_cache, STREAM_ALL_CACHE_MAX)
-    _88z_source_links_cache[key] = (time.time(), links)
-    return links
+    last = None
+    start = _active_source["i"]
+    for offset in range(len(SOURCE_MIRRORS)):
+        index = (start + offset) % len(SOURCE_MIRRORS)
+        base = _source_base(SOURCE_MIRRORS[index])
+        try:
+            raw = fetch_url(base + "live/%s/source" % match_id, referer=base, timeout=20)
+            links = _decode_88zhibo_source_links(raw)
+            _active_source["i"] = index
+            _active_source["url"] = SOURCE_MIRRORS[index]
+            _trim_cache(_88z_source_links_cache, STREAM_ALL_CACHE_MAX)
+            _88z_source_links_cache[key] = (time.time(), links)
+            return links
+        except Exception as exc:
+            last = exc
+            continue
+    raise last if last else RuntimeError("全部直播源不可用")
 
 
 def _88z_source_link_for_src(src, links):

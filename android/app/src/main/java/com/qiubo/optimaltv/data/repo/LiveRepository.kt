@@ -29,7 +29,7 @@ class LiveRepository(
 
     companion object {
         /** 直播源由服务端提供对应 Referer，供中继播放清单及分片。 */
-        fun relayUrl(base: String, raw: String, referer: String = "https://www.88zhibo.tv/"): String =
+        fun relayUrl(base: String, raw: String, referer: String = "https://www.88kanqiu.cx/"): String =
             "$base/api/relay?u=" + URLEncoder.encode(raw, "UTF-8") + "&ref=" + URLEncoder.encode(referer, "UTF-8")
 
         internal fun matchesRequestPath(fresh: Boolean = true): String =

@@ -62,6 +62,52 @@ class ZhiBo88LiveTest(unittest.TestCase):
             direct.assert_called_once()
             implicit.assert_not_called()
 
+    def test_schedule_fetch_rotates_to_backup_mirror(self):
+        primary = "https://primary.example/"
+        backup = "https://backup.example/"
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = "足球赛程".encode("utf-8")
+        with mock.patch.object(proxy, "SOURCE_MIRRORS", [primary, backup]), \
+                mock.patch.dict(proxy._active_source, {"i": 0, "url": primary}, clear=True), \
+                mock.patch.object(
+                    proxy._direct_opener, "open",
+                    side_effect=[OSError("dns"), response],
+                ) as opened:
+            self.assertEqual("足球赛程", proxy.fetch_source())
+            self.assertEqual(1, proxy._active_source["i"])
+            self.assertEqual(backup, proxy._active_source["url"])
+            self.assertEqual(
+                [primary, backup],
+                [call.args[0].full_url for call in opened.call_args_list],
+            )
+
+    def test_source_endpoint_uses_active_mirror_and_rotates_on_failure(self):
+        primary = "https://primary.example/"
+        backup = "https://backup.example/"
+        links = [{"name": "线路A2", "url": "https://media.example/live/a2.m3u8"}]
+        calls = []
+
+        def fake_fetch(url, **kwargs):
+            calls.append((url, kwargs.get("referer")))
+            if url.startswith(primary):
+                raise OSError("dns")
+            return _source_response(links)
+
+        with mock.patch.object(proxy, "SOURCE_MIRRORS", [primary, backup]), \
+                mock.patch.dict(proxy._active_source, {"i": 0, "url": primary}, clear=True), \
+                mock.patch.object(proxy, "fetch_url", side_effect=fake_fetch):
+            actual = proxy._88z_source_links("880900", fresh=True)
+            self.assertEqual(links, actual)
+            self.assertEqual(
+                [
+                    (primary + "live/880900/source", primary),
+                    (backup + "live/880900/source", backup),
+                ],
+                calls,
+            )
+            self.assertEqual(1, proxy._active_source["i"])
+            self.assertEqual(backup, proxy._active_source["url"])
+
     def test_parse_filters_non_football_keeps_four_routes_in_order_with_nested_li(self):
         page = """
         <li class="live-list-group-time">2026-10-11</li>

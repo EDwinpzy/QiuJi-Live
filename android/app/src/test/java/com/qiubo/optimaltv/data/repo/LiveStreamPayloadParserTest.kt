@@ -107,6 +107,7 @@ class LiveStreamPayloadParserTest {
         val relay = LiveRepository.relayUrl("https://api.example.test", "https://cdn.example.test/live.m3u8")
 
         assertTrue(!relay.contains("football_vpn"))
+        assertTrue(relay.contains("ref=https%3A%2F%2Fwww.88kanqiu.cx%2F"))
     }
 
     @Test
@@ -121,7 +122,7 @@ class LiveStreamPayloadParserTest {
                   "cachedAt": 1760000000,
                   "url": "https://cdn.example/live-a.m3u8",
                   "sources": [
-                    {"url":"https://cdn.example/live-a.m3u8","player":"m3u8","source":"88z_4","name":"线路A2","referer":"https://www.88zhibo.tv/"}
+                    {"url":"https://cdn.example/live-a.m3u8","player":"m3u8","source":"88z_4","name":"线路A2","referer":"https://www.88kanqiu.cx/"}
                   ]
                 }
                 """.trimIndent(),
