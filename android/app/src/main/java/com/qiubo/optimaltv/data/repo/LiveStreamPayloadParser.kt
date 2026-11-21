@@ -23,7 +23,7 @@ internal data class LiveStreamPayload(
 
 /** Parses only server-confirmed playable HLS entries; source identifiers and labels stay dynamic. */
 internal object LiveStreamPayloadParser {
-    private const val DEFAULT_REFERER = "https://www.88zhibo.tv/"
+    private const val DEFAULT_REFERER = "https://www.88kanqiu.cx/"
 
     fun available(root: JSONObject): List<LiveStreamPayload> {
         val entries = root.optJSONArray("sources") ?: return emptyList()
